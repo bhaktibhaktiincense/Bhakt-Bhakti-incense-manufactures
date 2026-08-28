@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /login
+Disallow: /signup
+Disallow: /cart
+Disallow: /checkout
+Disallow: /account
+Disallow: /invoice/
+Disallow: /order-confirmation/
+
+Sitemap: https://bbincense.in/sitemap.xml
