@@ -629,9 +629,10 @@ export default function Admin() {
 
                               {activeTab === 'Orders' && (
                                 <Link 
-                                  to={`/invoice/${item.id}`}
+                                  to={`/invoice/${item.id ?? item.order_number}`}
                                   target="_blank"
-                                  className="text-[10px] font-bold px-2.5 py-1 bg-white hover:bg-chai-100 text-espresso-800 border border-chai-200 rounded transition-colors flex items-center gap-1"
+                                  rel="noopener noreferrer"
+                                  className="text-[10px] font-bold px-2.5 py-1 bg-white hover:bg-chai-100 text-espresso-800 border border-chai-200 rounded transition-colors flex items-center gap-1 shadow-xs"
                                 >
                                   <ExternalLink size={11} /> Print Invoice
                                 </Link>

@@ -46,6 +46,9 @@ export default function App() {
           <Route path="checkout" element={<Checkout />} />
           <Route path="order-confirmation/:id" element={<OrderConfirmation />} />
           <Route path="invoice/:id" element={<InvoiceViewer />} />
+          <Route path="invoice" element={<InvoiceViewer />} />
+          <Route path="invoices/:id" element={<InvoiceViewer />} />
+          <Route path="invoices" element={<InvoiceViewer />} />
           <Route path="account" element={<Account />} />
           <Route path="gallery" element={<Gallery />} />
         </Route>
