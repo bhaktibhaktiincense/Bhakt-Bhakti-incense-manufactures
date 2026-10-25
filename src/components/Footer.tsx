@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Instagram, Facebook, Youtube, MapPin, Phone, Mail } from 'lucide-react';
+import { Instagram, Facebook, Youtube, MapPin, Phone, Mail, ExternalLink } from 'lucide-react';
 
 export default function Footer() {
   return (
@@ -24,10 +24,52 @@ export default function Footer() {
             <p className="text-sm text-chai-200 leading-relaxed max-w-sm">
               Crafting Fragrance, Creating Devotion. Premium incense sticks crafted with care, quality fragrances and a commitment to creating a beautiful experience.
             </p>
-            <div className="flex space-x-4 pt-2">
-              <a href="#" className="w-10 h-10 rounded-full border border-marigold-500/30 flex items-center justify-center text-marigold-400 hover:bg-marigold-500 hover:text-espresso-900 transition-colors"><Instagram size={18} /></a>
-              <a href="#" className="w-10 h-10 rounded-full border border-marigold-500/30 flex items-center justify-center text-marigold-400 hover:bg-marigold-500 hover:text-espresso-900 transition-colors"><Facebook size={18} /></a>
-              <a href="#" className="w-10 h-10 rounded-full border border-marigold-500/30 flex items-center justify-center text-marigold-400 hover:bg-marigold-500 hover:text-espresso-900 transition-colors"><Youtube size={18} /></a>
+            
+            {/* Follow Us on Instagram */}
+            <div className="pt-1">
+              <a 
+                href="https://www.instagram.com/bhaktandbhaktiincense/"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Follow Bhakt & Bhakti Incense on Instagram (@bhaktandbhaktiincense)"
+                className="inline-flex items-center gap-2.5 px-4 py-2.5 rounded-lg bg-gradient-to-r from-espresso-800 to-espresso-850 hover:to-espresso-800 border border-marigold-500/40 hover:border-marigold-400 text-marigold-300 hover:text-marigold-200 text-xs font-medium tracking-wide transition-all shadow-md group"
+              >
+                <div className="w-6 h-6 rounded-md bg-gradient-to-tr from-[#f09433] via-[#dc2743] to-[#bc1888] flex items-center justify-center text-white shrink-0 group-hover:scale-110 transition-transform">
+                  <Instagram size={14} />
+                </div>
+                <div className="flex flex-col text-left">
+                  <span className="font-semibold text-chai-100 flex items-center gap-1">
+                    Follow Us on Instagram <ExternalLink size={11} className="opacity-70" />
+                  </span>
+                  <span className="text-[11px] text-marigold-400/90 font-mono">@bhaktandbhaktiincense</span>
+                </div>
+              </a>
+            </div>
+
+            <div className="flex items-center space-x-3 pt-1">
+              <a 
+                href="https://www.instagram.com/bhaktandbhaktiincense/" 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                aria-label="Instagram @bhaktandbhaktiincense" 
+                className="w-10 h-10 rounded-full border border-marigold-500/40 flex items-center justify-center text-marigold-400 hover:bg-marigold-500 hover:text-espresso-900 transition-colors"
+              >
+                <Instagram size={18} />
+              </a>
+              <a 
+                href="#" 
+                aria-label="Facebook"
+                className="w-10 h-10 rounded-full border border-marigold-500/30 flex items-center justify-center text-marigold-400 hover:bg-marigold-500 hover:text-espresso-900 transition-colors"
+              >
+                <Facebook size={18} />
+              </a>
+              <a 
+                href="#" 
+                aria-label="YouTube"
+                className="w-10 h-10 rounded-full border border-marigold-500/30 flex items-center justify-center text-marigold-400 hover:bg-marigold-500 hover:text-espresso-900 transition-colors"
+              >
+                <Youtube size={18} />
+              </a>
             </div>
           </div>
 

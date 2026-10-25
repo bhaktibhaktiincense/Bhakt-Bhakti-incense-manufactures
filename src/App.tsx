@@ -11,6 +11,7 @@ import About from './pages/About';
 import Manufacturing from './pages/Manufacturing';
 import Quality from './pages/Quality';
 import Products from './pages/Products';
+import ProductDetail from './pages/shop/ProductDetail';
 import Contact from './pages/Contact';
 import Feedback from './pages/Feedback';
 import Complaint from './pages/Complaint';
@@ -31,6 +32,8 @@ export default function App() {
           <Route index element={<Home />} />
           <Route path="about" element={<About />} />
           <Route path="products" element={<Products />} />
+          <Route path="products/:id" element={<ProductDetail />} />
+          <Route path="product/:slug" element={<ProductDetail />} />
           <Route path="manufacturing" element={<Manufacturing />} />
           <Route path="quality" element={<Quality />} />
           <Route path="contact" element={<Contact />} />
@@ -50,4 +53,3 @@ export default function App() {
     </Router>
   );
 }
-

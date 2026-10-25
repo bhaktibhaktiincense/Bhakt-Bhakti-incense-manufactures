@@ -1,6 +1,6 @@
 {
-  "name": "",
-  "description": "",
+  "name": "Bhakt & Bhakti Incense",
+  "description": "Bhakt & Bhakti Incense is a premium incense-stick manufacturing company offering quality fragrances for every sacred moment.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

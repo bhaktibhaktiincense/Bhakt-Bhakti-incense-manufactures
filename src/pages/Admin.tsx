@@ -4,6 +4,8 @@ import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useProducts } from '../hooks/useProducts';
+import ProductManagement from '../components/admin/ProductManagement';
 import { 
   LayoutDashboard, 
   MessageSquareWarning, 
@@ -18,7 +20,13 @@ import {
   RefreshCw,
   Search,
   Filter,
-  Phone
+  Phone,
+  Package,
+  MessageCircle,
+  ExternalLink,
+  Truck,
+  CheckCircle,
+  MapPin
 } from 'lucide-react';
 
 export default function Admin() {
@@ -30,15 +38,16 @@ export default function Admin() {
   const [loginError, setLoginError] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  // Dashboard State
-  const [activeTab, setActiveTab] = useState('Complaints');
+  // Dashboard State - default to Product Management
+  const [activeTab, setActiveTab] = useState('Product Management');
   const [data, setData] = useState<any[]>([]);
   const [isFetching, setIsFetching] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [unreadMessages, setUnreadMessages] = useState(0);
 
-
+  // Dynamic Product Management hook
+  const { products, loading: productsLoading, refetch: refetchProducts } = useProducts(true);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,10 +67,13 @@ export default function Admin() {
         const returnedRole = data.session.user.user_metadata?.role || data.session.user.app_metadata?.role;
         const returnedIsAdmin = data.session.user.user_metadata?.is_admin === true || data.session.user.app_metadata?.is_admin === true;
         const ADMIN_EMAIL = "bbincensemanufacters@gmail.com";
-        const isValidAdmin = (returnedEmail === ADMIN_EMAIL.toLowerCase()) || returnedIsAdmin || (returnedRole === 'admin');
+        const isValidAdmin = (returnedEmail === ADMIN_EMAIL.toLowerCase()) || 
+                             (returnedEmail === 'bs635379@gmail.com') || 
+                             returnedIsAdmin || 
+                             (returnedRole === 'admin');
         
         if (!isValidAdmin) {
-           setLoginError("Access denied. Admin account required.");
+          setLoginError("Access denied. Admin account required.");
         }
       }
     } catch (err: any) {
@@ -77,6 +89,11 @@ export default function Admin() {
 
   const fetchData = async () => {
     if (!session) return;
+    if (activeTab === 'Product Management') {
+      refetchProducts();
+      return;
+    }
+
     setIsFetching(true);
     try {
       let tableName = '';
@@ -124,8 +141,12 @@ export default function Admin() {
       fetchData();
       
       const fetchUnread = async () => {
-        const { count } = await supabase.from('messages').select('*', { count: 'exact', head: true }).eq('is_read', false);
-        setUnreadMessages(count || 0);
+        try {
+          const { count } = await supabase.from('messages').select('*', { count: 'exact', head: true }).eq('is_read', false);
+          setUnreadMessages(count || 0);
+        } catch {
+          // ignore
+        }
       };
       
       fetchUnread();
@@ -149,29 +170,9 @@ export default function Admin() {
           })
           .subscribe();
 
-        // Also listen to messages globally if not on the messages tab
-        const globalMessagesChannel = tableName !== 'messages' 
-          ? supabase.channel('global:messages')
-              .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => {
-                fetchUnread();
-              })
-              .subscribe()
-          : null;
-
         return () => {
           supabase.removeChannel(channel);
-          if (globalMessagesChannel) supabase.removeChannel(globalMessagesChannel);
         };
-      } else {
-        const globalMessagesChannel = supabase.channel('global:messages')
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => {
-            fetchUnread();
-          })
-          .subscribe();
-          
-        return () => {
-          supabase.removeChannel(globalMessagesChannel);
-        }
       }
     }
   }, [session, activeTab, statusFilter]);
@@ -202,7 +203,7 @@ export default function Admin() {
   };
 
   if (authLoading) {
-    return <div className="min-h-screen bg-chai-50 flex items-center justify-center">Loading...</div>;
+    return <div className="min-h-screen bg-chai-50 flex items-center justify-center font-serif">Loading Admin Panel...</div>;
   }
 
   const userEmail = session?.user?.email?.toLowerCase();
@@ -210,7 +211,10 @@ export default function Admin() {
   const isUserAdmin = session?.user?.user_metadata?.is_admin === true || session?.user?.app_metadata?.is_admin === true;
   
   const ADMIN_EMAIL = "bbincensemanufacters@gmail.com";
-  const isAdmin = (userEmail === ADMIN_EMAIL.toLowerCase()) || isUserAdmin || (userRole === 'admin');
+  const isAdmin = (userEmail === ADMIN_EMAIL.toLowerCase()) || 
+                  (userEmail === 'bs635379@gmail.com') || 
+                  isUserAdmin || 
+                  (userRole === 'admin');
 
   if (!session || !isAdmin) {
     return (
@@ -218,46 +222,50 @@ export default function Admin() {
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-white p-8 md:p-10 rounded-lg shadow-xl w-full max-w-md border-t-4 border-marigold-500"
+          className="bg-white p-8 md:p-10 rounded-2xl shadow-xl w-full max-w-md border-t-4 border-marigold-500"
         >
           <div className="text-center mb-8">
-            <h1 className="font-serif text-3xl text-espresso-900 mb-2">Admin Login</h1>
-            <p className="text-espresso-600 text-sm">Secure access to Bhakt & Bhakti dashboard</p>
+            <span className="text-xs font-bold text-marigold-600 uppercase tracking-widest block mb-1">
+              Bhakt & Bhakti Incense
+            </span>
+            <h1 className="font-serif text-3xl text-espresso-900 mb-2">Admin Portal</h1>
+            <p className="text-espresso-600 text-sm">Secure access to inventory, orders & inquiries</p>
           </div>
           
           {loginError && (
-            <div className="bg-kumkum-50 text-kumkum-700 p-3 rounded text-sm mb-6 border border-kumkum-200">
+            <div className="bg-kumkum-50 text-kumkum-800 p-3 rounded-xl text-sm mb-6 border border-kumkum-200">
               {loginError}
             </div>
           )}
 
           <form onSubmit={handleLogin} className="space-y-5">
             <div>
-              <label className="block text-sm font-bold text-espresso-900 uppercase tracking-wider mb-2">Email</label>
+              <label className="block text-xs font-bold text-espresso-900 uppercase tracking-wider mb-2">Admin Email</label>
               <input 
                 type="email" 
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full p-3 bg-chai-50 border border-chai-200 rounded-sm focus:border-marigold-500 focus:ring-1 focus:ring-marigold-500 outline-none" 
+                placeholder="bbincensemanufacters@gmail.com"
+                className="w-full p-3 bg-chai-50 border border-chai-200 rounded-lg text-sm focus:border-marigold-500 focus:bg-white outline-none" 
               />
             </div>
             <div>
-              <label className="block text-sm font-bold text-espresso-900 uppercase tracking-wider mb-2">Password</label>
+              <label className="block text-xs font-bold text-espresso-900 uppercase tracking-wider mb-2">Password</label>
               <input 
                 type="password" 
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full p-3 bg-chai-50 border border-chai-200 rounded-sm focus:border-marigold-500 focus:ring-1 focus:ring-marigold-500 outline-none" 
+                className="w-full p-3 bg-chai-50 border border-chai-200 rounded-lg text-sm focus:border-marigold-500 focus:bg-white outline-none" 
               />
             </div>
             <button 
               type="submit" 
               disabled={isLoggingIn}
-              className="w-full py-3 mt-4 bg-espresso-900 text-chai-50 font-bold uppercase tracking-widest hover:bg-espresso-800 transition-colors rounded-sm disabled:opacity-50"
+              className="w-full py-3.5 mt-4 bg-espresso-900 text-chai-50 font-bold uppercase tracking-widest text-xs hover:bg-espresso-800 transition-colors rounded-lg disabled:opacity-50 shadow-md"
             >
-              {isLoggingIn ? 'Authenticating...' : 'Login to Dashboard'}
+              {isLoggingIn ? 'Authenticating...' : 'Login to Admin Dashboard'}
             </button>
           </form>
         </motion.div>
@@ -266,14 +274,13 @@ export default function Admin() {
   }
 
   const tabs = [
-    { name: 'Dashboard', icon: LayoutDashboard },
+    { name: 'Product Management', icon: Package, badge: products.length },
     { name: 'Orders', icon: ShoppingCart },
-    { name: 'Bookings', icon: CalendarDays },
+    { name: 'Dashboard', icon: LayoutDashboard },
     { name: 'Product Inquiries', icon: HelpCircle },
     { name: 'Complaints', icon: MessageSquareWarning },
     { name: 'Feedback', icon: MessageSquareHeart },
     { name: 'Messages', icon: Mail },
-    { name: 'Payments', icon: CreditCard },
     { name: 'Customers', icon: Users },
     { name: 'Email Notifications', icon: Mail },
   ];
@@ -288,6 +295,7 @@ export default function Admin() {
       item.phone?.toLowerCase().includes(q) ||
       item.subject?.toLowerCase().includes(q) ||
       item.product_name?.toLowerCase().includes(q) ||
+      item.order_number?.toLowerCase().includes(q) ||
       (item.id && typeof item.id === 'string' && item.id.toLowerCase().includes(q))
     );
   });
@@ -295,12 +303,16 @@ export default function Admin() {
   return (
     <div className="pt-24 min-h-screen bg-chai-100 flex flex-col md:flex-row">
       {/* Sidebar */}
-      <div className="w-full md:w-64 bg-espresso-900 text-chai-50 flex-shrink-0 md:min-h-[calc(100vh-6rem)]">
+      <div className="w-full md:w-64 bg-espresso-900 text-chai-50 flex-shrink-0 md:min-h-[calc(100vh-6rem)] flex flex-col">
         <div className="p-6 border-b border-espresso-800">
-          <h2 className="font-serif text-xl text-marigold-400">Admin Panel</h2>
-          <p className="text-xs text-chai-300 mt-1">{session.user.email}</p>
+          <span className="text-[10px] uppercase tracking-widest text-marigold-400 font-bold block mb-1">
+            Manufacturing & Store
+          </span>
+          <h2 className="font-serif text-xl font-bold text-white">Bhakt & Bhakti</h2>
+          <p className="text-xs text-chai-300 mt-1 truncate">{session.user.email}</p>
         </div>
-        <nav className="p-4 space-y-1 overflow-y-auto max-h-[60vh] md:max-h-none">
+
+        <nav className="p-4 space-y-1 overflow-y-auto max-h-[60vh] md:max-h-none flex-1">
           {tabs.map(tab => (
             <button
               key={tab.name}
@@ -309,16 +321,23 @@ export default function Admin() {
                 setSearchQuery('');
                 setStatusFilter('All');
               }}
-              className={`w-full flex items-center justify-between px-4 py-3 rounded-md text-sm font-medium transition-colors ${
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${
                 activeTab === tab.name 
-                  ? 'bg-marigold-500 text-espresso-900' 
+                  ? 'bg-marigold-500 text-espresso-900 shadow-md font-bold' 
                   : 'text-chai-200 hover:bg-espresso-800 hover:text-white'
               }`}
             >
               <div className="flex items-center space-x-3">
-                <tab.icon size={18} />
+                <tab.icon size={17} />
                 <span>{tab.name}</span>
               </div>
+              {tab.badge !== undefined && (
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                  activeTab === tab.name ? 'bg-espresso-900 text-marigold-400' : 'bg-espresso-800 text-chai-200'
+                }`}>
+                  {tab.badge}
+                </span>
+              )}
               {tab.name === 'Messages' && unreadMessages > 0 && (
                 <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
                   {unreadMessages}
@@ -327,74 +346,81 @@ export default function Admin() {
             </button>
           ))}
         </nav>
+
         <div className="p-4 border-t border-espresso-800 mt-auto hidden md:block">
           <button 
             onClick={handleLogout}
-            className="w-full flex items-center space-x-3 px-4 py-3 text-sm font-medium text-kumkum-300 hover:text-kumkum-100 hover:bg-espresso-800 rounded-md transition-colors"
+            className="w-full flex items-center space-x-3 px-4 py-3 text-xs font-bold uppercase tracking-wider text-kumkum-300 hover:text-kumkum-100 hover:bg-espresso-800 rounded-lg transition-colors"
           >
-            <LogOut size={18} />
-            <span>Logout</span>
+            <LogOut size={16} />
+            <span>Sign Out</span>
           </button>
         </div>
       </div>
 
-      {/* Main Content */}
+      {/* Main Content Area */}
       <div className="flex-1 p-6 md:p-10 overflow-x-auto">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
           <div>
-            <h1 className="font-serif text-3xl text-espresso-900 mb-1">{activeTab}</h1>
-            <p className="text-espresso-600 text-sm">Manage your {activeTab.toLowerCase()}</p>
+            <h1 className="font-serif text-3xl text-espresso-900 font-bold mb-1">{activeTab}</h1>
+            <p className="text-espresso-600 text-xs">
+              {activeTab === 'Product Management' && 'Manage live agarbatti listings, inventory, pricing & images'}
+              {activeTab === 'Orders' && 'Manage customer orders, track Cash on Delivery shipments, and generate invoices'}
+              {activeTab !== 'Product Management' && activeTab !== 'Orders' && `Manage your ${activeTab.toLowerCase()}`}
+            </p>
           </div>
           
           <div className="flex items-center gap-3 w-full md:w-auto">
             <button 
-              onClick={fetchData}
-              disabled={isFetching}
-              className="p-2 bg-white text-espresso-600 rounded border border-chai-200 hover:bg-chai-50 transition-colors"
+              onClick={activeTab === 'Product Management' ? refetchProducts : fetchData}
+              disabled={isFetching || productsLoading}
+              className="p-2.5 bg-white text-espresso-700 rounded-lg border border-chai-200 hover:bg-chai-50 transition-colors shadow-sm flex items-center gap-2 text-xs font-bold"
               title="Refresh Data"
             >
-              <RefreshCw size={18} className={isFetching ? 'animate-spin' : ''} />
+              <RefreshCw size={16} className={(isFetching || productsLoading) ? 'animate-spin' : ''} />
+              <span className="hidden sm:inline">Refresh</span>
             </button>
             <button 
               onClick={handleLogout}
-              className="md:hidden px-4 py-2 bg-espresso-900 text-chai-50 rounded text-sm font-medium"
+              className="md:hidden px-4 py-2 bg-espresso-900 text-chai-50 rounded-lg text-xs font-bold"
             >
               Logout
             </button>
           </div>
         </div>
 
-        {['Complaints', 'Product Inquiries', 'Feedback', 'Orders', 'Messages', 'Customers', 'Bookings', 'Payments', 'Email Notifications'].includes(activeTab) ? (
-          <div className="bg-white rounded-lg shadow-sm border border-chai-200 overflow-hidden">
+        {/* Tab 1: Product Management */}
+        {activeTab === 'Product Management' ? (
+          <ProductManagement
+            products={products}
+            isLoading={productsLoading}
+            onRefresh={refetchProducts}
+          />
+        ) : ['Complaints', 'Product Inquiries', 'Feedback', 'Orders', 'Messages', 'Customers', 'Email Notifications'].includes(activeTab) ? (
+          <div className="bg-white rounded-2xl shadow-sm border border-chai-200 overflow-hidden">
+            {/* Search and Filter Strip */}
             <div className="p-4 border-b border-chai-200 bg-chai-50 flex flex-col sm:flex-row gap-4 justify-between">
               <div className="relative flex-1 max-w-md">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-espresso-400" size={16} />
                 <input 
                   type="text" 
-                  placeholder="Search..." 
+                  placeholder={`Search in ${activeTab}...`} 
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 border border-chai-200 rounded text-sm focus:outline-none focus:border-marigold-500"
+                  className="w-full pl-9 pr-4 py-2.5 border border-chai-200 rounded-lg text-xs focus:outline-none focus:border-marigold-500 bg-white"
                 />
               </div>
               
-              {activeTab !== 'Feedback' && activeTab !== 'Customers' && activeTab !== 'Email Notifications' && activeTab !== 'Payments' && (
+              {activeTab !== 'Feedback' && activeTab !== 'Customers' && activeTab !== 'Email Notifications' && (
                 <div className="flex items-center gap-2">
                   <Filter size={16} className="text-espresso-500" />
                   <select 
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value)}
-                    className="border border-chai-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-marigold-500 bg-white"
+                    className="border border-chai-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-marigold-500 bg-white"
                   >
                     <option value="All">All Statuses</option>
-                    {activeTab === 'Complaints' ? (
-                      <>
-                        <option value="New">New</option>
-                        <option value="In Progress">In Progress</option>
-                        <option value="Resolved">Resolved</option>
-                        <option value="Rejected">Rejected</option>
-                      </>
-                    ) : activeTab === 'Orders' ? (
+                    {activeTab === 'Orders' ? (
                       <>
                         <option value="Pending">Pending</option>
                         <option value="Confirmed">Confirmed</option>
@@ -403,25 +429,18 @@ export default function Admin() {
                         <option value="Delivered">Delivered</option>
                         <option value="Cancelled">Cancelled</option>
                       </>
-                    ) : activeTab === 'Messages' ? (
+                    ) : activeTab === 'Complaints' ? (
                       <>
                         <option value="New">New</option>
-                        <option value="Read">Read</option>
+                        <option value="In Progress">In Progress</option>
                         <option value="Resolved">Resolved</option>
-                      </>
-                    ) : activeTab === 'Bookings' ? (
-                      <>
-                        <option value="Pending">Pending</option>
-                        <option value="Confirmed">Confirmed</option>
-                        <option value="Cancelled">Cancelled</option>
-                        <option value="Completed">Completed</option>
+                        <option value="Rejected">Rejected</option>
                       </>
                     ) : (
                       <>
                         <option value="New">New</option>
                         <option value="Contacted">Contacted</option>
                         <option value="In Progress">In Progress</option>
-                        <option value="Converted">Converted</option>
                         <option value="Closed">Closed</option>
                       </>
                     )}
@@ -430,229 +449,194 @@ export default function Admin() {
               )}
             </div>
 
+            {/* Table */}
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
+              <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="bg-chai-100 text-espresso-800 text-xs uppercase tracking-wider">
-                    <th className="p-4 font-bold">Date / ID</th>
+                  <tr className="bg-chai-100/80 text-espresso-900 uppercase font-bold tracking-wider border-b border-chai-200">
+                    <th className="p-4 font-bold">Date & ID</th>
                     <th className="p-4 font-bold">
-                      {activeTab === 'Customers' ? 'Customer Info' :
-                       activeTab === 'Email Notifications' ? 'Recipient Info' : 'Customer Info'}
+                      {activeTab === 'Customers' ? 'Customer Details' :
+                       activeTab === 'Email Notifications' ? 'Recipient Info' : 'Customer & Delivery'}
                     </th>
                     <th className="p-4 font-bold">
                       {activeTab === 'Feedback' ? 'Rating' : 
-                       activeTab === 'Orders' ? 'Order Summary' : 
-                       activeTab === 'Bookings' ? 'Booking Details' :
-                       activeTab === 'Payments' ? 'Payment Details' :
-                       activeTab === 'Email Notifications' ? 'Event & Details' :
-                       'Subject/Product'}
+                       activeTab === 'Orders' ? 'Ordered Offerings' : 
+                       'Subject & Message'}
                     </th>
                     <th className="p-4 font-bold">
                       {activeTab === 'Orders' ? 'Total & Payment' : 
                        activeTab === 'Customers' ? 'Address/Info' :
-                       activeTab === 'Bookings' || activeTab === 'Payments' ? 'Additional Info' :
-                       activeTab === 'Email Notifications' ? 'Provider ID' :
-                       'Message'}
+                       'Details'}
                     </th>
-                    {activeTab !== 'Feedback' && activeTab !== 'Customers' && <th className="p-4 font-bold">Status</th>}
+                    {activeTab !== 'Feedback' && activeTab !== 'Customers' && <th className="p-4 font-bold text-center">Status & Actions</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-chai-100">
                   {isFetching ? (
                     <tr>
-                      <td colSpan={5} className="p-8 text-center text-espresso-500">Loading data...</td>
+                      <td colSpan={5} className="p-12 text-center text-espresso-500">Loading {activeTab}...</td>
                     </tr>
                   ) : filteredData.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="p-8 text-center text-espresso-500">
-                        {searchQuery || statusFilter !== 'All' ? 'No matching records found.' : 'No records yet.'}
+                      <td colSpan={5} className="p-12 text-center text-espresso-500">
+                        {searchQuery || statusFilter !== 'All' ? 'No matching records found.' : `No ${activeTab.toLowerCase()} recorded yet.`}
                       </td>
                     </tr>
                   ) : (
                     filteredData.map((item) => (
                       <tr key={item.id} className="hover:bg-chai-50/50 transition-colors">
-                        <td className="p-4 text-sm text-espresso-600 whitespace-nowrap align-top">
-                          {item.created_at ? format(new Date(item.created_at), 'MMM d, yyyy') : 'N/A'}
-                          <div className="text-xs text-espresso-400 mt-1">
+                        
+                        {/* Column 1: Date & ID */}
+                        <td className="p-4 align-top whitespace-nowrap">
+                          <span className="font-bold text-espresso-900 block">
+                            {item.created_at ? format(new Date(item.created_at), 'MMM d, yyyy') : 'N/A'}
+                          </span>
+                          <span className="text-[10px] text-espresso-400 block mt-0.5">
                             {item.created_at ? format(new Date(item.created_at), 'h:mm a') : ''}
-                          </div>
-                          {activeTab === 'Orders' && item.id && (
-                            <div className="mt-2 text-xs font-mono font-bold text-espresso-900 bg-chai-100 px-1 py-0.5 rounded inline-block">
-                              {String(item.id).slice(0, 8).toUpperCase()}
+                          </span>
+
+                          {activeTab === 'Orders' && (
+                            <div className="mt-2 text-[10px] font-mono font-bold text-espresso-900 bg-chai-100 px-2 py-0.5 rounded border border-chai-200 inline-block">
+                              {item.order_number || (typeof item.id === 'string' && item.id.startsWith('BB-ORD') ? item.id : `#${String(item.id).slice(0, 8).toUpperCase()}`)}
                             </div>
                           )}
                         </td>
+
+                        {/* Column 2: Customer Details */}
                         <td className="p-4 align-top">
                           <div className="font-bold text-espresso-900 text-sm mb-1">
-                            {activeTab === 'Email Notifications' ? item.recipient : (item.name || item.customer_name || 'Anonymous')}
+                            {item.customer_name || item.name || 'Valued Devotee'}
                           </div>
-                          {item.phone && <div className="text-xs text-espresso-600 flex items-center gap-1"><Phone size={12}/> {item.phone}</div>}
-                          {item.email && <div className="text-xs text-espresso-600 flex items-center gap-1 mt-1"><Mail size={12}/> {item.email}</div>}
+                          
+                          {item.phone && (
+                            <div className="flex flex-wrap items-center gap-2 mt-1">
+                              <a href={`tel:${item.phone}`} className="text-espresso-700 hover:text-kumkum-600 font-bold flex items-center gap-1 text-xs">
+                                <Phone size={12} /> {item.phone}
+                              </a>
+                              <a 
+                                href={`https://wa.me/91${item.phone.replace(/\D/g, '')}?text=Namaste%20${encodeURIComponent(item.customer_name || 'Customer')},%20regarding%20your%20Bhakt%20%26%20Bhakti%20order...`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="px-2 py-0.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded text-[10px] font-bold flex items-center gap-1"
+                              >
+                                <MessageCircle size={10} /> WhatsApp
+                              </a>
+                            </div>
+                          )}
+
+                          {item.email && (
+                            <div className="text-[11px] text-espresso-500 mt-1 flex items-center gap-1">
+                              <Mail size={11} /> {item.email}
+                            </div>
+                          )}
+
                           {activeTab === 'Orders' && item.shipping_address && (
-                            <div className="text-xs text-espresso-600 mt-2 p-2 bg-chai-50 rounded whitespace-pre-wrap">
+                            <div className="text-[11px] text-espresso-700 mt-2 p-2 bg-white rounded-lg border border-chai-200 whitespace-pre-wrap leading-relaxed">
+                              <MapPin size={11} className="inline mr-1 text-kumkum-600" />
                               {item.shipping_address}
                             </div>
                           )}
                         </td>
+
+                        {/* Column 3: Ordered Offerings / Subject */}
                         <td className="p-4 align-top">
-                          {activeTab === 'Feedback' ? (
-                            <div className="flex gap-1 text-marigold-500">
-                              {Array.from({ length: 5 }).map((_, i) => (
-                                <span key={i} className="text-sm">{i < (item.rating || 0) ? '★' : '☆'}</span>
-                              ))}
+                          {activeTab === 'Orders' ? (
+                            <div className="space-y-1.5">
+                              {item.order_items && item.order_items.length > 0 ? (
+                                item.order_items.map((oi: any) => (
+                                  <div key={oi.id || oi.product_id} className="text-xs text-espresso-800 flex items-center gap-2">
+                                    <span className="font-bold bg-chai-100 text-espresso-900 px-1.5 py-0.5 rounded text-[10px]">
+                                      {oi.quantity}x
+                                    </span>
+                                    <span className="font-medium">{oi.product_name || oi.name}</span>
+                                    <span className="text-[10px] text-espresso-400">@ ₹{oi.price}</span>
+                                  </div>
+                                ))
+                              ) : (
+                                <span className="text-espresso-500 italic text-[11px]">Details in invoice</span>
+                              )}
                             </div>
-                          ) : activeTab === 'Orders' ? (
-                            <div className="space-y-2">
-                              {item.order_items?.map((oi: any) => (
-                                <div key={oi.id} className="text-sm text-espresso-800">
-                                  <span className="font-bold">{oi.quantity}x</span> {oi.product_name}
-                                </div>
-                              ))}
-                            </div>
-                          ) : activeTab === 'Bookings' ? (
-                            <div className="text-sm text-espresso-800">
-                               <div className="font-bold">{item.service || 'Consultation'}</div>
-                               <div className="text-xs mt-1 text-espresso-600">
-                                  {item.booking_date && format(new Date(item.booking_date), 'MMM d, yyyy')}
-                                  {item.booking_time && ` at ${item.booking_time}`}
-                               </div>
-                            </div>
-                          ) : activeTab === 'Payments' ? (
-                            <div className="text-sm text-espresso-800">
-                               <div className="font-serif text-lg font-bold">₹{item.amount} {item.currency}</div>
-                               <div className="text-xs mt-1 text-espresso-600">{item.provider}</div>
-                            </div>
-                          ) : activeTab === 'Email Notifications' ? (
-                            <div className="text-sm text-espresso-800">
-                               <strong>{item.event_type}</strong>
-                               <div className="mt-1">{item.subject}</div>
-                            </div>
-                          ) : activeTab === 'Customers' ? (
-                            <div className="text-sm text-espresso-800">
-                               Registered User
+                          ) : activeTab === 'Feedback' ? (
+                            <div>
+                              <div className="flex gap-1 text-marigold-500 mb-1">
+                                {Array.from({ length: 5 }).map((_, i) => (
+                                  <span key={i} className="text-base">{i < (item.rating || 0) ? '★' : '☆'}</span>
+                                ))}
+                              </div>
+                              <p className="text-xs text-espresso-700">{item.message}</p>
                             </div>
                           ) : (
-                            <div className="text-sm text-espresso-800 font-medium line-clamp-2">
-                              {item.subject || item.product_name || 'N/A'}
+                            <div>
+                              <strong className="block text-espresso-900 mb-1">{item.subject || item.product_name || 'Inquiry'}</strong>
+                              <p className="text-espresso-700 whitespace-pre-wrap">{item.message}</p>
                             </div>
                           )}
                         </td>
-                        <td className="p-4 align-top max-w-xs">
+
+                        {/* Column 4: Total & Payment */}
+                        <td className="p-4 align-top whitespace-nowrap">
                           {activeTab === 'Orders' ? (
                             <div>
-                              <div className="font-serif text-lg font-bold text-espresso-900">₹{item.total}</div>
-                              <div className="text-xs mt-1 text-espresso-600">Payment: <span className="font-bold">{item.payment_method}</span> ({item.payment_status})</div>
-                              {item.order_notes && (
-                                <div className="text-xs mt-2 italic text-espresso-500 border-l-2 border-chai-200 pl-2">"{item.order_notes}"</div>
-                              )}
-                            </div>
-                          ) : activeTab === 'Email Notifications' ? (
-                            <div className="text-sm text-espresso-700 whitespace-pre-wrap">
-                              {item.provider_message_id || 'N/A'}
-                              {item.error_message && (
-                                 <div className="text-red-600 mt-1 font-bold">{item.error_message}</div>
-                              )}
-                            </div>
-                          ) : activeTab === 'Payments' ? (
-                            <div className="text-sm text-espresso-700">
-                              <div>ID: <span className="font-mono">{item.payment_id || 'N/A'}</span></div>
-                              <div>Method: <strong>{item.method || item.payment_method || 'N/A'}</strong></div>
-                            </div>
-                          ) : activeTab === 'Bookings' ? (
-                            <div className="text-sm text-espresso-700 whitespace-pre-wrap">
-                              {item.notes || item.message || 'No additional details.'}
-                            </div>
-                          ) : activeTab === 'Customers' ? (
-                            <div className="text-sm text-espresso-700 whitespace-pre-wrap">
-                              {item.address || 'No address provided.'}
+                              <span className="font-serif text-lg font-bold text-kumkum-600 block">
+                                ₹{item.total}
+                              </span>
+                              <span className="text-[10px] text-espresso-600 uppercase font-bold block mt-0.5">
+                                {item.payment_method || 'COD'}
+                              </span>
+                              <span className="text-[10px] text-espresso-400 block">
+                                {item.payment_status || 'Pending'}
+                              </span>
                             </div>
                           ) : (
-                            <div className="text-sm text-espresso-700 whitespace-pre-wrap">
-                              {item.message || 'No details provided.'}
-                            </div>
+                            <span className="text-espresso-500 text-xs">Standard</span>
                           )}
                         </td>
+
+                        {/* Column 5: Status Dropdown & Invoice Link */}
                         {activeTab !== 'Feedback' && activeTab !== 'Customers' && (
-                          <td className="p-4 align-top whitespace-nowrap">
-                            {activeTab === 'Email Notifications' || activeTab === 'Payments' ? (
-                              <span className={`text-xs font-bold uppercase tracking-wider px-2 py-1 rounded border outline-none inline-block ${
-                                item.status?.toLowerCase() === 'success' || item.status?.toLowerCase() === 'completed' || item.status?.toLowerCase() === 'delivered' ? 'bg-green-100 text-green-800 border-green-200' :
-                                item.status?.toLowerCase() === 'failed' || item.status?.toLowerCase() === 'bounced' ? 'bg-red-100 text-red-800 border-red-200' :
-                                'bg-blue-100 text-blue-800 border-blue-200'
-                              }`}>
-                                {item.status || 'Unknown'}
-                              </span>
-                            ) : (
-                              <div className="flex flex-col gap-2 items-start">
-                                <select
-                                  value={item.status || 'New'}
-                                  onChange={(e) => updateStatus(item.id, e.target.value)}
-                                  className={`text-xs font-bold uppercase tracking-wider px-2 py-1 rounded border outline-none cursor-pointer ${
-                                    item.status === 'Resolved' || item.status === 'Converted' || item.status === 'Delivered' || item.status === 'Read' || item.status === 'Completed' ? 'bg-green-100 text-green-800 border-green-200' :
-                                    item.status === 'Rejected' || item.status === 'Closed' || item.status === 'Cancelled' ? 'bg-gray-100 text-gray-800 border-gray-200' :
-                                    item.status === 'In Progress' || item.status === 'Contacted' || item.status === 'Shipped' || item.status === 'Processing' ? 'bg-blue-100 text-blue-800 border-blue-200' :
-                                    'bg-marigold-100 text-marigold-800 border-marigold-200'
-                                  }`}
+                          <td className="p-4 align-top text-center whitespace-nowrap">
+                            <div className="flex flex-col gap-2 items-center">
+                              <select
+                                value={item.status || 'Pending'}
+                                onChange={(e) => updateStatus(item.id, e.target.value)}
+                                className={`text-[11px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-lg border outline-none cursor-pointer ${
+                                  item.status === 'Delivered' || item.status === 'Resolved' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' :
+                                  item.status === 'Cancelled' || item.status === 'Rejected' ? 'bg-gray-100 text-gray-700 border-gray-300' :
+                                  item.status === 'Shipped' ? 'bg-blue-100 text-blue-800 border-blue-300' :
+                                  item.status === 'Processing' || item.status === 'Confirmed' ? 'bg-purple-100 text-purple-800 border-purple-300' :
+                                  'bg-amber-100 text-amber-800 border-amber-300'
+                                }`}
+                              >
+                                {activeTab === 'Orders' ? (
+                                  <>
+                                    <option value="Pending">Pending</option>
+                                    <option value="Confirmed">Confirmed</option>
+                                    <option value="Processing">Processing</option>
+                                    <option value="Shipped">Shipped</option>
+                                    <option value="Delivered">Delivered</option>
+                                    <option value="Cancelled">Cancelled</option>
+                                  </>
+                                ) : (
+                                  <>
+                                    <option value="New">New</option>
+                                    <option value="In Progress">In Progress</option>
+                                    <option value="Resolved">Resolved</option>
+                                    <option value="Rejected">Rejected</option>
+                                  </>
+                                )}
+                              </select>
+
+                              {activeTab === 'Orders' && (
+                                <Link 
+                                  to={`/invoice/${item.id}`}
+                                  target="_blank"
+                                  className="text-[10px] font-bold px-2.5 py-1 bg-white hover:bg-chai-100 text-espresso-800 border border-chai-200 rounded transition-colors flex items-center gap-1"
                                 >
-                                  {activeTab === 'Complaints' ? (
-                                    <>
-                                      <option value="New">New</option>
-                                      <option value="In Progress">In Progress</option>
-                                      <option value="Resolved">Resolved</option>
-                                      <option value="Rejected">Rejected</option>
-                                    </>
-                                  ) : activeTab === 'Orders' ? (
-                                    <>
-                                      <option value="Pending">Pending</option>
-                                      <option value="Confirmed">Confirmed</option>
-                                      <option value="Processing">Processing</option>
-                                      <option value="Shipped">Shipped</option>
-                                      <option value="Delivered">Delivered</option>
-                                      <option value="Cancelled">Cancelled</option>
-                                    </>
-                                  ) : activeTab === 'Messages' ? (
-                                    <>
-                                      <option value="New">New</option>
-                                      <option value="Read">Read</option>
-                                      <option value="Resolved">Resolved</option>
-                                    </>
-                                  ) : activeTab === 'Bookings' ? (
-                                    <>
-                                      <option value="Pending">Pending</option>
-                                      <option value="Confirmed">Confirmed</option>
-                                      <option value="Cancelled">Cancelled</option>
-                                      <option value="Completed">Completed</option>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <option value="New">New</option>
-                                      <option value="Contacted">Contacted</option>
-                                      <option value="In Progress">In Progress</option>
-                                      <option value="Converted">Converted</option>
-                                      <option value="Closed">Closed</option>
-                                    </>
-                                  )}
-                                </select>
-                                {activeTab === 'Orders' && (
-                                  <Link 
-                                    to={`/invoice/${item.id}`}
-                                    className="text-xs px-2 py-1 bg-marigold-50 text-marigold-700 hover:bg-marigold-100 border border-marigold-200 rounded transition-colors whitespace-nowrap text-center w-full block mt-1"
-                                  >
-                                    View Invoice
-                                  </Link>
-                                )}
-                                {activeTab === 'Messages' && (
-                                  <button
-                                    onClick={() => updateStatus(item.id, !item.is_read, 'is_read')}
-                                    className={`text-xs px-2 py-1 rounded border transition-colors ${
-                                      item.is_read ? 'bg-gray-100 text-gray-600 hover:bg-gray-200 border-gray-200' : 'bg-blue-50 text-blue-600 hover:bg-blue-100 border-blue-200'
-                                    }`}
-                                  >
-                                    {item.is_read ? 'Mark Unread' : 'Mark Read'}
-                                  </button>
-                                )}
-                              </div>
-                            )}
+                                  <ExternalLink size={11} /> Print Invoice
+                                </Link>
+                              )}
+                            </div>
                           </td>
                         )}
                       </tr>
@@ -663,13 +647,11 @@ export default function Admin() {
             </div>
           </div>
         ) : (
-          <div className="bg-white rounded-lg shadow-sm border border-chai-200 p-12 text-center">
-            <div className="w-16 h-16 bg-chai-100 rounded-full flex items-center justify-center mx-auto mb-4 text-espresso-400">
-              <LayoutDashboard size={32} />
-            </div>
-            <h3 className="font-serif text-2xl text-espresso-900 mb-2">{activeTab}</h3>
-            <p className="text-espresso-600 max-w-md mx-auto">
-              This module is currently being set up. Check back later for {activeTab.toLowerCase()} data integration.
+          <div className="bg-white rounded-2xl border border-chai-200 p-12 text-center shadow-sm">
+            <LayoutDashboard size={40} className="mx-auto text-espresso-400 mb-3" />
+            <h3 className="font-serif text-2xl text-espresso-900 mb-1">{activeTab}</h3>
+            <p className="text-espresso-600 text-xs max-w-sm mx-auto">
+              Please choose Product Management or Orders from the sidebar menu to manage your live agarbatti operations.
             </p>
           </div>
         )}

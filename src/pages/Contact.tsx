@@ -1,7 +1,7 @@
 import { useSEO } from '../hooks/useSEO';
 import React, { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { MapPin, Phone, Mail, Clock, CheckCircle2 } from 'lucide-react';
+import { MapPin, Phone, Mail, Clock, CheckCircle2, Instagram, ExternalLink } from 'lucide-react';
 import { motion } from 'motion/react';
 import { supabase } from '../lib/supabase';
 
@@ -123,6 +123,22 @@ export default function Contact() {
                   </div>
                 </div>
                 <div className="flex items-start space-x-4 text-espresso-800">
+                  <Instagram className="text-marigold-500 mt-1 shrink-0" />
+                  <div>
+                    <strong className="block text-espresso-900 mb-1">Official Instagram</strong>
+                    <a 
+                      href="https://www.instagram.com/bhaktandbhaktiincense/" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-kumkum-600 hover:text-marigold-600 font-medium inline-flex items-center gap-1 transition-colors"
+                    >
+                      @bhaktandbhaktiincense
+                      <ExternalLink size={13} className="shrink-0" />
+                    </a>
+                    <p className="text-xs text-espresso-600 mt-0.5">Follow for daily spiritual updates & artisan incense</p>
+                  </div>
+                </div>
+                <div className="flex items-start space-x-4 text-espresso-800">
                   <Clock className="text-marigold-500 mt-1 shrink-0" />
                   <div>
                     <strong className="block text-espresso-900 mb-1">Business Hours</strong>
@@ -138,6 +154,14 @@ export default function Contact() {
               <div className="flex flex-col space-y-3">
                 <a href="tel:+917323059651" className="w-full py-3 bg-espresso-900 text-chai-50 font-medium tracking-wide uppercase text-sm hover:bg-kumkum-600 transition-colors text-center block">Call Now</a>
                 <a href="https://wa.me/917323059651" target="_blank" rel="noopener noreferrer" className="w-full py-3 bg-[#25D366] text-white font-medium tracking-wide uppercase text-sm hover:bg-[#128C7E] transition-colors text-center block">WhatsApp Us</a>
+                <a 
+                  href="https://www.instagram.com/bhaktandbhaktiincense/" 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="w-full py-3 bg-gradient-to-r from-espresso-850 via-[#833ab4]/80 to-kumkum-600 text-white font-medium tracking-wide uppercase text-sm hover:opacity-95 transition-opacity text-center flex items-center justify-center gap-2 border border-marigold-500/30 shadow-sm"
+                >
+                  <Instagram size={18} /> Follow on Instagram
+                </a>
                 <a href="mailto:bbincensemanufacters@gmail.com" className="w-full py-3 border-2 border-espresso-900 text-espresso-900 font-medium tracking-wide uppercase text-sm hover:bg-chai-100 transition-colors text-center block">Email Us</a>
               </div>
             </div>
