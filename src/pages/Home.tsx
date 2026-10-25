@@ -92,8 +92,8 @@ export default function Home() {
             <div className="relative">
               <div className="aspect-[4/5] rounded-t-full overflow-hidden border-8 border-chai-100 shadow-2xl relative z-10 bg-chai-200">
                 <img 
-                  src="/agarbatti-story.png" 
-                  alt="A Legacy of Purity & Tradition - Bhakt & Bhakti Incense" 
+                  src="/agarbatti_facility.jpg" 
+                  alt="Bhakt & Bhakti Premium Agarbatti Manufacturing Facility" 
                   className="w-full h-full object-cover"
                 />
               </div>
