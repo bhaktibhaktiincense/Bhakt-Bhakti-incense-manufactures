@@ -4,6 +4,7 @@ import { motion } from 'motion/react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Instagram, ExternalLink, Sparkles } from 'lucide-react';
 import { useProducts } from '../hooks/useProducts';
+import { isComingSoon, isOutOfStock } from '../types/product';
 
 export default function Home() {
   useSEO({ title: "Premium Agarbatti Manufacturer", description: "Bhakt & Bhakti Incense is a premium incense-stick manufacturing company offering quality fragrances for every sacred moment.", path: "/" });
@@ -136,8 +137,14 @@ export default function Home() {
                       className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-700" 
                     />
                   </Link>
-                  <div className="absolute top-6 right-6 bg-kumkum-600 text-chai-50 text-[10px] px-3 py-1 uppercase tracking-widest font-medium rounded-full shadow-md z-10">
-                    {prod.availability_label || (prod.is_featured ? 'Featured' : 'Available Now')}
+                  <div className={`absolute top-6 right-6 text-[10px] px-3 py-1 uppercase tracking-widest font-bold rounded-full shadow-md z-10 ${
+                    isComingSoon(prod.availability_label)
+                      ? 'bg-amber-600 text-white'
+                      : isOutOfStock(prod)
+                      ? 'bg-red-700 text-white'
+                      : 'bg-kumkum-600 text-chai-50'
+                  }`}>
+                    {isComingSoon(prod.availability_label) ? 'Coming Soon' : isOutOfStock(prod) ? 'Out of Stock' : (prod.availability_label || (prod.is_featured ? 'Featured' : 'Available Now'))}
                   </div>
                 </div>
                 <div className="p-6 pt-5 text-center flex-1 flex flex-col">
@@ -156,9 +163,13 @@ export default function Home() {
                     <div className="text-kumkum-600 font-bold text-base mb-3">₹{prod.price}</div>
                     <Link 
                       to={`/product/${prod.slug || prod.id}`} 
-                      className="inline-block w-full py-3 bg-marigold-500 text-espresso-900 font-bold uppercase tracking-widest hover:bg-marigold-400 transition-colors rounded-sm text-xs"
+                      className={`inline-block w-full py-3 font-bold uppercase tracking-widest transition-colors rounded-sm text-xs ${
+                        isComingSoon(prod.availability_label)
+                          ? 'bg-amber-100 text-amber-900 hover:bg-amber-200 border border-amber-300'
+                          : 'bg-marigold-500 text-espresso-900 hover:bg-marigold-400'
+                      }`}
                     >
-                      View Details
+                      {isComingSoon(prod.availability_label) ? 'Coming Soon — Details' : 'View Details'}
                     </Link>
                   </div>
                 </div>

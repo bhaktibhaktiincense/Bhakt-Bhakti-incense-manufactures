@@ -15,7 +15,7 @@ import {
   MessageCircleQuestion
 } from 'lucide-react';
 import { fetchProductBySlug, fetchProducts } from '../../services/productService';
-import { Product } from '../../types/product';
+import { Product, isComingSoon, isOutOfStock, isProductPurchasable } from '../../types/product';
 import { useCart } from '../../contexts/CartContext';
 import { useSEO } from '../../hooks/useSEO';
 
@@ -93,7 +93,10 @@ export default function ProductDetail() {
     );
   }
 
-  const isAvailable = product.active && (product.stock_quantity > 0 || product.availability_label === 'Available Now');
+  const isComingSoonProd = isComingSoon(product.availability_label);
+  const isOutStock = isOutOfStock(product);
+  const purchasable = isProductPurchasable(product);
+  const isAvailable = purchasable;
   const discountPercent = product.mrp > product.price 
     ? Math.round(((product.mrp - product.price) / product.mrp) * 100) 
     : 0;
@@ -101,29 +104,35 @@ export default function ProductDetail() {
     ? product.gallery_images 
     : [product.image];
 
-  const handleAddToCart = () => {
-    if (!isAvailable) return;
-    addToCart({
+  const handleAddToCart = async () => {
+    if (!purchasable) return;
+    const res = await addToCart({
       product_id: product.id,
       name: product.name,
       price: product.price,
       quantity: quantity,
-      image: product.image
+      image: product.image,
+      availability_label: product.availability_label
     });
-    setAddedNotice(true);
-    setTimeout(() => setAddedNotice(false), 3000);
+    if (res?.success) {
+      setAddedNotice(true);
+      setTimeout(() => setAddedNotice(false), 3000);
+    }
   };
 
-  const handleBuyNow = () => {
-    if (!isAvailable) return;
-    addToCart({
+  const handleBuyNow = async () => {
+    if (!purchasable) return;
+    const res = await addToCart({
       product_id: product.id,
       name: product.name,
       price: product.price,
       quantity: quantity,
-      image: product.image
+      image: product.image,
+      availability_label: product.availability_label
     });
-    navigate('/checkout');
+    if (res?.success) {
+      navigate('/checkout');
+    }
   };
 
   return (
@@ -160,15 +169,17 @@ export default function ProductDetail() {
               {/* Status Badge */}
               <div className="absolute top-6 left-6">
                 <span className={`text-xs px-3.5 py-1.5 uppercase tracking-wider font-bold rounded-full shadow-sm ${
-                  isAvailable 
-                    ? 'bg-kumkum-600 text-chai-50' 
-                    : 'bg-espresso-800 text-marigold-400'
+                  isComingSoonProd
+                    ? 'bg-amber-600 text-white'
+                    : isOutStock
+                    ? 'bg-red-700 text-white'
+                    : 'bg-kumkum-600 text-chai-50'
                 }`}>
-                  {product.availability_label || (isAvailable ? 'Available Now' : 'Coming Soon')}
+                  {isComingSoonProd ? 'Coming Soon' : isOutStock ? 'Out of Stock' : (product.availability_label || 'Available Now')}
                 </span>
               </div>
 
-              {discountPercent > 0 && (
+              {discountPercent > 0 && purchasable && (
                 <div className="absolute top-6 right-6 bg-marigold-500 text-espresso-900 text-xs px-3 py-1 font-bold rounded-full uppercase tracking-wider shadow-sm">
                   {discountPercent}% OFF
                 </div>
@@ -270,11 +281,14 @@ export default function ProductDetail() {
             {/* Stock indicator */}
             <div className="flex items-center gap-2 text-sm">
               <span className={`w-2.5 h-2.5 rounded-full ${
+                isComingSoonProd ? 'bg-amber-500 animate-pulse' :
                 product.stock_quantity > 10 ? 'bg-emerald-500 animate-pulse' :
                 product.stock_quantity > 0 ? 'bg-amber-500' : 'bg-red-500'
               }`} />
               <span className="font-medium text-espresso-800">
-                {product.stock_quantity > 20 
+                {isComingSoonProd
+                  ? 'Coming Soon — Traditional Fragrance Preparation & Curing in Progress'
+                  : product.stock_quantity > 20 
                   ? 'In Stock — Dispatched within 24 hours' 
                   : product.stock_quantity > 0 
                   ? `Only ${product.stock_quantity} packets remaining!` 
@@ -282,8 +296,8 @@ export default function ProductDetail() {
               </span>
             </div>
 
-            {/* Quantity Selector & Buttons */}
-            {isAvailable ? (
+            {/* Quantity Selector & Action Buttons OR Coming Soon Notice */}
+            {purchasable ? (
               <div className="space-y-4 pt-2">
                 <div className="flex items-center gap-4">
                   <span className="text-sm font-bold text-espresso-900 uppercase tracking-wider">Quantity:</span>
@@ -355,17 +369,41 @@ export default function ProductDetail() {
                   🚚 <strong>Free Home Delivery</strong> on orders over ₹500 across India. Cash on Delivery (COD) supported.
                 </p>
               </div>
+            ) : isComingSoonProd ? (
+              <div className="bg-amber-50/90 border-2 border-amber-300 p-6 rounded-2xl shadow-sm text-espresso-900 space-y-4">
+                <div className="flex items-center gap-2.5 text-amber-900 font-bold text-base md:text-lg">
+                  <Clock size={22} className="text-amber-600 flex-shrink-0" />
+                  <span>Coming Soon — Not Available for Purchase Yet</span>
+                </div>
+                <p className="text-xs md:text-sm text-espresso-700 leading-relaxed">
+                  This authentic incense creation is currently being crafted and cured in our sacred fragrance room. Customers cannot purchase this item yet until it officially launches. You may send an inquiry below for pre-order requests or bulk requirements.
+                </p>
+                <div className="pt-2 flex flex-wrap items-center gap-3">
+                  <Link
+                    to={`/contact?product=${encodeURIComponent(product.name)}`}
+                    className="inline-flex items-center gap-2 px-5 py-3 bg-espresso-900 text-chai-50 font-bold text-xs uppercase tracking-wider rounded-lg hover:bg-espresso-800 transition-colors shadow-sm"
+                  >
+                    <MessageCircleQuestion size={16} /> Send Pre-Order / Launch Inquiry
+                  </Link>
+                  <Link
+                    to="/products"
+                    className="inline-flex items-center gap-1.5 px-4 py-3 bg-white border border-chai-300 text-espresso-800 font-bold text-xs uppercase tracking-wider rounded-lg hover:bg-chai-100 transition-colors"
+                  >
+                    Explore Available Offerings →
+                  </Link>
+                </div>
+              </div>
             ) : (
-              <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl text-espresso-800 text-sm">
-                <p className="font-bold mb-1">Coming Soon to Devotees</p>
-                <p className="text-xs text-espresso-600 mb-3">
-                  This batch is currently being cured in our traditional fragrance room. Pre-order inquiries are welcome for bulk orders.
+              <div className="bg-red-50 border border-red-200 p-5 rounded-xl text-espresso-800 space-y-3">
+                <p className="font-bold text-red-800 text-base">Currently Out of Stock</p>
+                <p className="text-xs text-espresso-600">
+                  This fragrance is currently sold out. New batches are curing and will be restocked soon.
                 </p>
                 <Link
                   to={`/contact?product=${encodeURIComponent(product.name)}`}
                   className="inline-block px-5 py-2.5 bg-marigold-500 text-espresso-900 font-bold text-xs uppercase tracking-wider rounded hover:bg-marigold-400 transition-colors"
                 >
-                  Send Pre-Order Inquiry
+                  Notify Me When Restocked
                 </Link>
               </div>
             )}

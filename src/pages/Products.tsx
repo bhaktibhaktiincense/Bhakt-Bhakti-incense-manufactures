@@ -4,8 +4,8 @@ import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { useCart } from '../contexts/CartContext';
 import { useProducts } from '../hooks/useProducts';
-import { ShoppingCart, Eye, Sparkles, Filter, Check } from 'lucide-react';
-import { PRODUCT_CATEGORIES } from '../types/product';
+import { ShoppingCart, Eye, Sparkles, Filter, Check, Clock } from 'lucide-react';
+import { PRODUCT_CATEGORIES, isComingSoon, isProductPurchasable, isOutOfStock } from '../types/product';
 
 export default function Products() {
   useSEO({
@@ -24,16 +24,20 @@ export default function Products() {
     return p.category === selectedCategory;
   });
 
-  const handleAdd = (prod: any) => {
-    addToCart({
+  const handleAdd = async (prod: any) => {
+    if (!isProductPurchasable(prod)) return;
+    const res = await addToCart({
       product_id: prod.id,
       name: prod.name,
       price: prod.price,
       quantity: 1,
-      image: prod.image
+      image: prod.image,
+      availability_label: prod.availability_label
     });
-    setJustAddedId(prod.id);
-    setTimeout(() => setJustAddedId(null), 2500);
+    if (res?.success) {
+      setJustAddedId(prod.id);
+      setTimeout(() => setJustAddedId(null), 2500);
+    }
   };
 
   return (
@@ -108,7 +112,9 @@ export default function Products() {
         ) : (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
             {filteredProducts.map((prod) => {
-              const isAvailable = prod.active && (prod.stock_quantity > 0 || prod.availability_label === 'Available Now');
+              const isComingSoonProd = isComingSoon(prod.availability_label);
+              const isOutStock = isOutOfStock(prod);
+              const purchasable = isProductPurchasable(prod);
               const discountPercent = prod.mrp > prod.price 
                 ? Math.round(((prod.mrp - prod.price) / prod.mrp) * 100) 
                 : 0;
@@ -118,7 +124,11 @@ export default function Products() {
                   key={prod.id}
                   whileHover={{ y: -6 }}
                   className={`bg-chai-50 rounded-t-[100px] overflow-hidden shadow-xl transition-all duration-300 border-b-4 flex flex-col ${
-                    isAvailable ? 'border-kumkum-600 group' : 'border-espresso-700 opacity-80'
+                    purchasable 
+                      ? 'border-kumkum-600 group' 
+                      : isComingSoonProd 
+                      ? 'border-amber-500 group' 
+                      : 'border-espresso-700 opacity-80'
                   }`}
                 >
                   {/* Arched Photo Showcase */}
@@ -128,7 +138,7 @@ export default function Products() {
                         src={prod.image} 
                         alt={`Bhakt & Bhakti ${prod.name} Incense Sticks`} 
                         className={`w-full h-full object-contain transition-transform duration-700 ${
-                          isAvailable ? 'group-hover:scale-105' : 'opacity-60 mix-blend-luminosity'
+                          purchasable ? 'group-hover:scale-105' : isComingSoonProd ? 'group-hover:scale-102' : 'opacity-60 mix-blend-luminosity'
                         }`} 
                       />
                     </Link>
@@ -136,16 +146,18 @@ export default function Products() {
                     {/* Availability Badge */}
                     <div className="absolute top-6 right-6">
                       <span className={`text-[10px] md:text-xs px-3 py-1 uppercase tracking-widest font-bold rounded-full shadow-md ${
-                        isAvailable 
-                          ? 'bg-kumkum-600 text-chai-50' 
-                          : 'bg-espresso-900 text-marigold-400'
+                        isComingSoonProd
+                          ? 'bg-amber-600 text-white'
+                          : isOutStock
+                          ? 'bg-red-700 text-white'
+                          : 'bg-kumkum-600 text-chai-50'
                       }`}>
-                        {prod.availability_label || (isAvailable ? 'Available Now' : 'Coming Soon')}
+                        {isComingSoonProd ? 'Coming Soon' : isOutStock ? 'Out of Stock' : (prod.availability_label || 'Available Now')}
                       </span>
                     </div>
 
                     {/* Discount badge */}
-                    {discountPercent > 0 && (
+                    {discountPercent > 0 && !isComingSoonProd && !isOutStock && (
                       <div className="absolute top-6 left-6 bg-marigold-500 text-espresso-900 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider shadow-sm">
                         {discountPercent}% OFF
                       </div>
@@ -186,7 +198,7 @@ export default function Products() {
 
                     {/* Action buttons */}
                     <div className="mt-auto flex flex-col gap-2">
-                      {isAvailable ? (
+                      {purchasable ? (
                         <>
                           <button 
                             type="button"
@@ -218,10 +230,47 @@ export default function Products() {
                             </Link>
                           </div>
                         </>
+                      ) : isComingSoonProd ? (
+                        <>
+                          <div className="w-full py-2.5 px-3 bg-amber-50 border border-amber-300 text-amber-900 font-bold uppercase tracking-wider rounded-sm text-center text-[11px] flex items-center justify-center gap-1.5 shadow-sm">
+                            <Clock size={14} className="text-amber-600 flex-shrink-0" />
+                            <span>Coming Soon — Not Available for Purchase Yet</span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 mt-1">
+                            <Link 
+                              to={`/product/${prod.slug || prod.id}`} 
+                              className="py-2 bg-white border border-espresso-300 text-espresso-900 font-bold uppercase tracking-wider hover:bg-chai-100 transition-colors rounded-sm text-center text-[11px] flex items-center justify-center gap-1"
+                            >
+                              <Eye size={13} /> View Details
+                            </Link>
+                            <Link 
+                              to={`/contact?product=${encodeURIComponent(prod.name)}`} 
+                              className="py-2 border border-marigold-500 text-espresso-900 font-bold uppercase tracking-wider hover:bg-marigold-100/60 transition-colors rounded-sm text-center text-[11px]"
+                            >
+                              Pre-Order Enquiry
+                            </Link>
+                          </div>
+                        </>
                       ) : (
-                        <button disabled className="w-full py-3 border border-espresso-700 text-espresso-700 font-bold uppercase tracking-widest cursor-not-allowed rounded-sm bg-chai-100 text-xs">
-                          In Development
-                        </button>
+                        <>
+                          <div className="w-full py-2.5 px-3 bg-chai-100 border border-espresso-300 text-espresso-700 font-bold uppercase tracking-wider rounded-sm text-center text-[11px]">
+                            Currently Out of Stock
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 mt-1">
+                            <Link 
+                              to={`/product/${prod.slug || prod.id}`} 
+                              className="py-2 bg-white border border-espresso-300 text-espresso-900 font-bold uppercase tracking-wider hover:bg-chai-100 transition-colors rounded-sm text-center text-[11px] flex items-center justify-center gap-1"
+                            >
+                              <Eye size={13} /> View
+                            </Link>
+                            <Link 
+                              to={`/contact?product=${encodeURIComponent(prod.name)}`} 
+                              className="py-2 border border-marigold-500 text-espresso-900 font-bold uppercase tracking-wider hover:bg-marigold-100/60 transition-colors rounded-sm text-center text-[11px]"
+                            >
+                              Enquiry
+                            </Link>
+                          </div>
+                        </>
                       )}
                     </div>
                   </div>

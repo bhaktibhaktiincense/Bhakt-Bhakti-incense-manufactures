@@ -1,19 +1,21 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useAuth } from './AuthContext';
 import { supabase } from '../lib/supabase';
+import { isComingSoon } from '../types/product';
 
 export type CartItem = {
   id?: string;
-  product_id: string; // we'll use product name as ID for now since we don't have a products table
+  product_id: string;
   name: string;
   price: number;
   quantity: number;
   image?: string;
+  availability_label?: string;
 };
 
 type CartContextType = {
   items: CartItem[];
-  addToCart: (item: Omit<CartItem, 'id'>) => Promise<void>;
+  addToCart: (item: Omit<CartItem, 'id'>) => Promise<{ success: boolean; message?: string }>;
   removeFromCart: (productId: string) => Promise<void>;
   updateQuantity: (productId: string, quantity: number) => Promise<void>;
   clearCart: () => Promise<void>;
@@ -142,7 +144,16 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
-  const addToCart = async (newItem: Omit<CartItem, 'id'>) => {
+  const addToCart = async (newItem: Omit<CartItem, 'id'>): Promise<{ success: boolean; message?: string }> => {
+    // 1. Strictly block "Coming Soon" products from being added to the cart
+    if (isComingSoon(newItem.availability_label)) {
+      console.warn(`Attempted to add Coming Soon product "${newItem.name}" to cart.`);
+      return { 
+        success: false, 
+        message: `"${newItem.name}" is Coming Soon and is not available for purchase yet.` 
+      };
+    }
+
     setItems(prev => {
       const existing = prev.find(i => i.product_id === newItem.product_id);
       if (existing) {
@@ -174,6 +185,8 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
         if (e.code !== 'PGRST205') console.error("DB cart update error", e);
       }
     }
+
+    return { success: true };
   };
 
   const removeFromCart = async (productId: string) => {

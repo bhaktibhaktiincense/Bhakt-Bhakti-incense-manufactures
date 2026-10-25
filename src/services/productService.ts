@@ -359,16 +359,28 @@ export async function toggleProductFeatured(id: string, is_featured: boolean): P
 }
 
 /**
- * Quick update for stock quantity and availability label
+ * Quick update for stock quantity (preserves existing availability label unless specified or zero stock)
  */
 export async function updateProductStock(id: string, stock_quantity: number, availability_label?: string): Promise<boolean> {
-  const updates: UpdateProductInput = { 
-    stock_quantity,
-    availability_label: availability_label || (stock_quantity > 0 ? 'Available Now' : 'Out of Stock')
-  };
+  const updates: UpdateProductInput = { stock_quantity };
+  if (availability_label) {
+    updates.availability_label = availability_label;
+  } else if (stock_quantity === 0) {
+    updates.availability_label = 'Out of Stock';
+  }
   const res = await updateProduct(id, updates);
   return Boolean(res.product);
 }
+
+/**
+ * Quick update for availability label (e.g. 'Available Now', 'Coming Soon', 'Out of Stock')
+ * Directly persists to database and triggers live update across website
+ */
+export async function updateProductAvailability(id: string, availability_label: string): Promise<boolean> {
+  const res = await updateProduct(id, { availability_label });
+  return Boolean(res.product);
+}
+
 
 /**
  * Upload an image using the server endpoint (supporting mobile devices and Supabase Storage)

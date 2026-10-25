@@ -379,10 +379,27 @@ async function startServer() {
 
         const authorName = dbProduct?.name || dbProduct?.product_name || fallback?.name || item.name || 'Sacred Incense';
 
-        // Check if product is active
+        // 4a. Check if product is active
         if (dbProduct && dbProduct.active === false) {
           return res.status(400).json({
             error: `"${authorName}" is currently inactive or hidden, and cannot be ordered.`
+          });
+        }
+
+        // 4b. Check if product is "Coming Soon" - strictly reject purchase
+        const isComingSoonProd = (dbProduct?.availability_label && dbProduct.availability_label.trim().toLowerCase() === 'coming soon') ||
+                                (item.availability_label && String(item.availability_label).trim().toLowerCase() === 'coming soon');
+        if (isComingSoonProd) {
+          return res.status(400).json({
+            error: `"${authorName}" is Coming Soon and not available for purchase yet.`
+          });
+        }
+
+        // 4c. Check if product is marked "Out of Stock"
+        const isOutOfStockLabel = dbProduct?.availability_label && dbProduct.availability_label.trim().toLowerCase() === 'out of stock';
+        if (isOutOfStockLabel) {
+          return res.status(400).json({
+            error: `"${authorName}" is currently out of stock.`
           });
         }
 
@@ -394,7 +411,13 @@ async function startServer() {
           : (fallback?.stock ?? 100);
         const authorImage = dbProduct?.image || fallback?.image || item.image || '/IMG-20260808-WA0005.jpg';
 
-        // Check if sufficient stock is available
+        // 4d. Check if sufficient stock is available
+        if (availableStock <= 0) {
+          return res.status(400).json({
+            error: `"${authorName}" is currently out of stock.`
+          });
+        }
+
         if (qty > availableStock) {
           return res.status(400).json({
             error: `Insufficient stock for "${authorName}". Only ${availableStock} units available.`

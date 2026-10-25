@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCart } from '../../contexts/CartContext';
+import { useProducts } from '../../hooks/useProducts';
 import { supabase } from '../../lib/supabase';
 import { Lock, Truck, ShieldCheck, ArrowLeft, AlertCircle } from 'lucide-react';
+import { isComingSoon, isOutOfStock } from '../../types/product';
 import { useSEO } from '../../hooks/useSEO';
 
 export default function Checkout() {
