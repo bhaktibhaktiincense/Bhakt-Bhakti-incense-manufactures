@@ -6,6 +6,7 @@ import { useCart } from '../contexts/CartContext';
 import { useProducts } from '../hooks/useProducts';
 import { ShoppingCart, Eye, Sparkles, Filter, Check, Clock } from 'lucide-react';
 import { PRODUCT_CATEGORIES, isComingSoon, isProductPurchasable, isOutOfStock } from '../types/product';
+import { trackProductClick } from '../utils/analytics';
 
 export default function Products() {
   useSEO({
@@ -133,7 +134,11 @@ export default function Products() {
                 >
                   {/* Arched Photo Showcase */}
                   <div className="h-64 md:h-72 overflow-hidden relative p-4 pt-6 bg-chai-100 flex items-center justify-center">
-                    <Link to={`/product/${prod.slug || prod.id}`} className="w-full h-full flex items-center justify-center">
+                    <Link 
+                      to={`/product/${prod.slug || prod.id}`} 
+                      onClick={() => trackProductClick(prod.id, prod.name)}
+                      className="w-full h-full flex items-center justify-center"
+                    >
                       <img 
                         src={prod.image} 
                         alt={`Bhakt & Bhakti ${prod.name} Incense Sticks`} 
@@ -170,7 +175,11 @@ export default function Products() {
                       {prod.category}
                     </span>
                     <h3 className="font-serif text-2xl mb-2 text-espresso-900 font-bold">
-                      <Link to={`/product/${prod.slug || prod.id}`} className="hover:text-kumkum-600 transition-colors">
+                      <Link 
+                        to={`/product/${prod.slug || prod.id}`} 
+                        onClick={() => trackProductClick(prod.id, prod.name)}
+                        className="hover:text-kumkum-600 transition-colors"
+                      >
                         {prod.name}
                       </Link>
                     </h3>

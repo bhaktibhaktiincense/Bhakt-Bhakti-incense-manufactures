@@ -7,6 +7,7 @@ import { supabase } from '../../lib/supabase';
 import { Lock, Truck, ShieldCheck, ArrowLeft, AlertCircle } from 'lucide-react';
 import { isComingSoon, isOutOfStock } from '../../types/product';
 import { useSEO } from '../../hooks/useSEO';
+import { trackCheckoutStart, trackOrderCompleted } from '../../utils/analytics';
 
 export default function Checkout() {
   useSEO({
@@ -32,6 +33,13 @@ export default function Checkout() {
 
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Track Checkout Start event in Website Analytics
+  useEffect(() => {
+    if (items.length > 0) {
+      trackCheckoutStart(cartTotalWithShipping, items.length, items);
+    }
+  }, [items.length]);
 
   // Pre-fill profile data if logged in
   useEffect(() => {
@@ -167,6 +175,13 @@ export default function Checkout() {
       } catch (storageErr) {
         console.warn("Storage warning:", storageErr);
       }
+
+      // Track completed order in Website Analytics
+      trackOrderCompleted(
+        result.orderId || result.orderNumber, 
+        result.total || cartTotalWithShipping, 
+        result.items || items
+      );
 
       // Clear shopping cart
       await clearCart();

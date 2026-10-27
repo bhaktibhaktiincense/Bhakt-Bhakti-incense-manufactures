@@ -387,3 +387,72 @@ GRANT ALL ON ALL ROUTINES IN SCHEMA public TO postgres, anon, authenticated, ser
 GRANT ALL ON TABLE storage.objects TO postgres, anon, authenticated, service_role;
 GRANT ALL ON TABLE storage.buckets TO postgres, anon, authenticated, service_role;
 
+
+-- =========================================================================
+-- 9. WEBSITE ANALYTICS SCHEMA & SECURITY (RLS)
+-- =========================================================================
+
+CREATE TABLE IF NOT EXISTS analytics_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  event_type VARCHAR(50) NOT NULL,
+  visitor_id VARCHAR(64) NOT NULL,
+  session_id VARCHAR(64) NOT NULL,
+  path TEXT NOT NULL DEFAULT '/',
+  referrer TEXT,
+  traffic_source TEXT DEFAULT 'Direct',
+  device_category VARCHAR(20) NOT NULL DEFAULT 'desktop',
+  browser VARCHAR(50),
+  product_id TEXT,
+  product_name TEXT,
+  order_id TEXT,
+  order_value NUMERIC(10, 2),
+  metadata JSONB DEFAULT '{}'::jsonb,
+  session_duration_seconds INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+);
+
+-- Optimize query indexes for time-range filtering, aggregation, and product analytics
+CREATE INDEX IF NOT EXISTS idx_analytics_created_at ON analytics_events(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_analytics_event_type ON analytics_events(event_type);
+CREATE INDEX IF NOT EXISTS idx_analytics_visitor_id ON analytics_events(visitor_id);
+CREATE INDEX IF NOT EXISTS idx_analytics_product_id ON analytics_events(product_id);
+CREATE INDEX IF NOT EXISTS idx_analytics_session_id ON analytics_events(session_id);
+
+-- Enable Row Level Security (RLS)
+ALTER TABLE analytics_events ENABLE ROW LEVEL SECURITY;
+
+-- Policy 1: Public visitors (anon and authenticated) may ONLY insert analytics events
+DROP POLICY IF EXISTS "Public insert analytics events" ON analytics_events;
+CREATE POLICY "Public insert analytics events"
+  ON analytics_events FOR INSERT
+  TO anon, authenticated
+  WITH CHECK (true);
+
+-- Policy 2: Strictly restrict read/SELECT to authenticated administrators
+DROP POLICY IF EXISTS "Admin only read analytics events" ON analytics_events;
+CREATE POLICY "Admin only read analytics events"
+  ON analytics_events FOR SELECT
+  TO authenticated
+  USING (
+    (auth.jwt() ->> 'email') = 'bbincensemanufacters@gmail.com'
+    OR (auth.jwt() ->> 'email') = 'bs635379@gmail.com'
+    OR (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin'
+    OR (auth.jwt() -> 'app_metadata' ->> 'role') = 'admin'
+    OR (auth.jwt() -> 'user_metadata' ->> 'is_admin') = 'true'
+    OR (auth.role() = 'service_role')
+  );
+
+-- Policy 3: Restrict DELETE to administrators
+DROP POLICY IF EXISTS "Admin delete analytics" ON analytics_events;
+CREATE POLICY "Admin delete analytics"
+  ON analytics_events FOR DELETE
+  TO authenticated
+  USING (
+    (auth.jwt() ->> 'email') = 'bbincensemanufacters@gmail.com'
+    OR (auth.jwt() ->> 'email') = 'bs635379@gmail.com'
+    OR (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin'
+  );
+
+-- Grant privileges for analytics_events
+GRANT SELECT, INSERT ON TABLE analytics_events TO anon, authenticated;
+GRANT ALL ON TABLE analytics_events TO service_role;

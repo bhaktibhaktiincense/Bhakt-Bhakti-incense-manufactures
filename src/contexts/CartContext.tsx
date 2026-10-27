@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useAuth } from './AuthContext';
 import { supabase } from '../lib/supabase';
 import { isComingSoon } from '../types/product';
+import { trackAddToCart } from '../utils/analytics';
 
 export type CartItem = {
   id?: string;
@@ -185,6 +186,9 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
         if (e.code !== 'PGRST205') console.error("DB cart update error", e);
       }
     }
+
+    // Track Add-to-Cart event in Website Analytics
+    trackAddToCart(newItem.product_id, newItem.name, newItem.quantity, newItem.price);
 
     return { success: true };
   };

@@ -18,6 +18,7 @@ import { fetchProductBySlug, fetchProducts } from '../../services/productService
 import { Product, isComingSoon, isOutOfStock, isProductPurchasable } from '../../types/product';
 import { useCart } from '../../contexts/CartContext';
 import { useSEO } from '../../hooks/useSEO';
+import { trackProductView } from '../../utils/analytics';
 
 export default function ProductDetail() {
   const { slug, id } = useParams<{ slug?: string; id?: string }>();
@@ -43,6 +44,8 @@ export default function ProductDetail() {
         setProduct(item);
         if (item) {
           setSelectedImage(item.image);
+          // Track product view in Website Analytics
+          trackProductView(item.id, item.name);
           // Fetch related active items
           const all = await fetchProducts(false);
           const others = all.filter(p => p.id !== item.id && p.slug !== item.slug).slice(0, 3);

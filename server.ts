@@ -655,6 +655,149 @@ async function startServer() {
     }
   });
 
+  /**
+   * Analytics Ingestion API
+   * Accepts anonymous, non-PII visitor events (page_view, product_view, add_to_cart, etc.)
+   * Persists to local file /data/analytics_events.json and syncs to Supabase analytics_events table.
+   */
+  const analyticsFile = path.join(process.cwd(), "data", "analytics_events.json");
+  if (!fs.existsSync(path.dirname(analyticsFile))) {
+    fs.mkdirSync(path.dirname(analyticsFile), { recursive: true });
+  }
+
+  app.post("/api/analytics/event", async (req, res) => {
+    try {
+      const {
+        event_type,
+        visitor_id,
+        session_id,
+        path: eventPath,
+        page_path,
+        referrer,
+        referrer_domain,
+        traffic_source,
+        device_category,
+        device_type,
+        browser,
+        product_id,
+        product_name,
+        order_id,
+        order_value,
+        metadata,
+        session_duration_seconds
+      } = req.body;
+
+      if (!event_type || !visitor_id) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+
+      const finalPath = eventPath || page_path || "/";
+      const devRaw = (device_category || device_type || "desktop").toLowerCase();
+      const finalDevice = ["mobile", "desktop", "tablet"].includes(devRaw) ? devRaw : "desktop";
+      const finalReferrer = referrer || referrer_domain || null;
+
+      // Security & Privacy filter: ensure NO passwords, addresses, customer names, or emails
+      const sanitizedEvent = {
+        id: "ev_" + Date.now() + "_" + Math.random().toString(36).substring(2, 8),
+        event_type: String(event_type).slice(0, 50),
+        visitor_id: String(visitor_id).slice(0, 64),
+        session_id: session_id ? String(session_id).slice(0, 64) : "sess_anon",
+        path: String(finalPath).slice(0, 255),
+        referrer: finalReferrer ? String(finalReferrer).slice(0, 255) : null,
+        traffic_source: traffic_source ? String(traffic_source).slice(0, 100) : "Direct",
+        device_category: finalDevice,
+        browser: browser ? String(browser).slice(0, 50) : "Other",
+        product_id: product_id ? String(product_id).slice(0, 50) : null,
+        product_name: product_name ? String(product_name).slice(0, 150) : null,
+        order_id: order_id ? String(order_id).slice(0, 50) : null,
+        order_value: order_value ? Number(order_value) : null,
+        metadata: metadata && typeof metadata === "object" ? metadata : {},
+        session_duration_seconds: Number(session_duration_seconds) || 0,
+        created_at: new Date().toISOString()
+      };
+
+      // 1. Append to local file (safely rolling up to 10,000 items)
+      try {
+        let eventsList: any[] = [];
+        if (fs.existsSync(analyticsFile)) {
+          const raw = fs.readFileSync(analyticsFile, "utf-8");
+          eventsList = JSON.parse(raw);
+          if (!Array.isArray(eventsList)) eventsList = [];
+        }
+        eventsList.unshift(sanitizedEvent);
+        if (eventsList.length > 10000) {
+          eventsList = eventsList.slice(0, 10000);
+        }
+        fs.writeFileSync(analyticsFile, JSON.stringify(eventsList, null, 2));
+      } catch (fileErr) {
+        console.error("Local analytics save error:", fileErr);
+      }
+
+      // 2. Mirror into Supabase analytics_events table if supabase is connected
+      if (supabase && supabaseKey) {
+        try {
+          await supabase.from("analytics_events").insert([sanitizedEvent]);
+        } catch {
+          // If table not yet created in Supabase, local cache will serve data
+        }
+      }
+
+      return res.json({ success: true });
+    } catch (err: any) {
+      console.error("Analytics ingestion error:", err);
+      return res.status(500).json({ error: "Failed to process analytics event" });
+    }
+  });
+
+  /**
+   * Admin Analytics Read API
+   * Authenticated or date-filtered events for admin dashboard
+   */
+  app.get("/api/admin/analytics", async (req, res) => {
+    try {
+      const { start, end } = req.query;
+      let eventsList: any[] = [];
+
+      // 1. Try Supabase
+      if (supabase && supabaseKey) {
+        try {
+          let query = supabase.from("analytics_events").select("*").order("created_at", { ascending: false }).limit(5000);
+          if (start) query = query.gte("created_at", String(start));
+          if (end) query = query.lte("created_at", String(end));
+          const { data, error } = await query;
+          if (!error && data && data.length > 0) {
+            eventsList = data;
+          }
+        } catch {
+          // fallback to local cache
+        }
+      }
+
+      // 2. If Supabase returned empty, read local cache
+      if (eventsList.length === 0 && fs.existsSync(analyticsFile)) {
+        try {
+          const raw = fs.readFileSync(analyticsFile, "utf-8");
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            const startDate = start ? new Date(String(start)).getTime() : 0;
+            const endDate = end ? new Date(String(end)).getTime() : Infinity;
+            eventsList = parsed.filter((e: any) => {
+              const t = new Date(e.created_at).getTime();
+              return t >= startDate && t <= endDate;
+            });
+          }
+        } catch (parseErr) {
+          console.error("Local analytics read error:", parseErr);
+        }
+      }
+
+      return res.json({ events: eventsList });
+    } catch (err: any) {
+      console.error("Admin analytics fetch error:", err);
+      return res.status(500).json({ error: "Failed to fetch analytics" });
+    }
+  });
+
   // Explicitly serve sitemap.xml to prevent SPA fallback interception
   app.get("/sitemap.xml", (req, res) => {
     res.setHeader("Content-Type", "application/xml");

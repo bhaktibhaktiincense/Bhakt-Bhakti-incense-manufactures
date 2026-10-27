@@ -6,8 +6,10 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useProducts } from '../hooks/useProducts';
 import ProductManagement from '../components/admin/ProductManagement';
+import { WebsiteAnalytics } from '../components/admin/WebsiteAnalytics';
 import { 
   LayoutDashboard, 
+  BarChart3,
   MessageSquareWarning, 
   HelpCircle, 
   MessageSquareHeart,
@@ -275,6 +277,7 @@ export default function Admin() {
 
   const tabs = [
     { name: 'Product Management', icon: Package, badge: products.length },
+    { name: 'Website Analytics', icon: BarChart3 },
     { name: 'Orders', icon: ShoppingCart },
     { name: 'Dashboard', icon: LayoutDashboard },
     { name: 'Product Inquiries', icon: HelpCircle },
@@ -365,21 +368,24 @@ export default function Admin() {
             <h1 className="font-serif text-3xl text-espresso-900 font-bold mb-1">{activeTab}</h1>
             <p className="text-espresso-600 text-xs">
               {activeTab === 'Product Management' && 'Manage live agarbatti listings, inventory, pricing & images'}
+              {activeTab === 'Website Analytics' && 'Real-time visitor behaviour, funnel conversions, and catalog performance'}
               {activeTab === 'Orders' && 'Manage customer orders, track Cash on Delivery shipments, and generate invoices'}
-              {activeTab !== 'Product Management' && activeTab !== 'Orders' && `Manage your ${activeTab.toLowerCase()}`}
+              {activeTab !== 'Product Management' && activeTab !== 'Website Analytics' && activeTab !== 'Orders' && `Manage your ${activeTab.toLowerCase()}`}
             </p>
           </div>
           
           <div className="flex items-center gap-3 w-full md:w-auto">
-            <button 
-              onClick={activeTab === 'Product Management' ? refetchProducts : fetchData}
-              disabled={isFetching || productsLoading}
-              className="p-2.5 bg-white text-espresso-700 rounded-lg border border-chai-200 hover:bg-chai-50 transition-colors shadow-sm flex items-center gap-2 text-xs font-bold"
-              title="Refresh Data"
-            >
-              <RefreshCw size={16} className={(isFetching || productsLoading) ? 'animate-spin' : ''} />
-              <span className="hidden sm:inline">Refresh</span>
-            </button>
+            {activeTab !== 'Website Analytics' && (
+              <button 
+                onClick={activeTab === 'Product Management' ? refetchProducts : fetchData}
+                disabled={isFetching || productsLoading}
+                className="p-2.5 bg-white text-espresso-700 rounded-lg border border-chai-200 hover:bg-chai-50 transition-colors shadow-sm flex items-center gap-2 text-xs font-bold"
+                title="Refresh Data"
+              >
+                <RefreshCw size={16} className={(isFetching || productsLoading) ? 'animate-spin' : ''} />
+                <span className="hidden sm:inline">Refresh</span>
+              </button>
+            )}
             <button 
               onClick={handleLogout}
               className="md:hidden px-4 py-2 bg-espresso-900 text-chai-50 rounded-lg text-xs font-bold"
@@ -389,13 +395,15 @@ export default function Admin() {
           </div>
         </div>
 
-        {/* Tab 1: Product Management */}
+        {/* Tab Content */}
         {activeTab === 'Product Management' ? (
           <ProductManagement
             products={products}
             isLoading={productsLoading}
             onRefresh={refetchProducts}
           />
+        ) : activeTab === 'Website Analytics' ? (
+          <WebsiteAnalytics products={products} />
         ) : ['Complaints', 'Product Inquiries', 'Feedback', 'Orders', 'Messages', 'Customers', 'Email Notifications'].includes(activeTab) ? (
           <div className="bg-white rounded-2xl shadow-sm border border-chai-200 overflow-hidden">
             {/* Search and Filter Strip */}
