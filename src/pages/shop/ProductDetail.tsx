@@ -12,11 +12,14 @@ import {
   PackageCheck,
   Share2,
   ChevronRight,
-  MessageCircleQuestion
+  MessageCircleQuestion,
+  Heart
 } from 'lucide-react';
 import { fetchProductBySlug, fetchProducts } from '../../services/productService';
 import { Product, isComingSoon, isOutOfStock, isProductPurchasable } from '../../types/product';
 import { useCart } from '../../contexts/CartContext';
+import { useWishlist } from '../../contexts/WishlistContext';
+import { ProductShareModal } from '../../components/shop/ProductShareModal';
 import { useSEO } from '../../hooks/useSEO';
 import { trackProductView } from '../../utils/analytics';
 
@@ -24,6 +27,7 @@ export default function ProductDetail() {
   const { slug, id } = useParams<{ slug?: string; id?: string }>();
   const navigate = useNavigate();
   const { addToCart } = useCart();
+  const { isLiked, getLikeCount, toggleLike, fetchProductLikeData } = useWishlist();
 
   const [product, setProduct] = useState<Product | null>(null);
   const [relatedProducts, setRelatedProducts] = useState<Product[]>([]);
@@ -31,6 +35,8 @@ export default function ProductDetail() {
   const [quantity, setQuantity] = useState<number>(1);
   const [loading, setLoading] = useState(true);
   const [addedNotice, setAddedNotice] = useState(false);
+  const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [likeNotice, setLikeNotice] = useState<string | null>(null);
 
   const identifier = slug || id || '';
 
@@ -61,6 +67,12 @@ export default function ProductDetail() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
     return () => { isMounted = false; };
   }, [identifier]);
+
+  useEffect(() => {
+    if (product?.id) {
+      fetchProductLikeData(product.id);
+    }
+  }, [product?.id, fetchProductLikeData]);
 
   useSEO({
     title: product ? `${product.name} - Handcrafted Incense` : "Sacred Incense Products",
@@ -138,6 +150,41 @@ export default function ProductDetail() {
     }
   };
 
+  const liked = product ? isLiked(product.id) : false;
+  const likesCount = product ? getLikeCount(product.id) : 0;
+
+
+  const handleToggleLike = async () => {
+    if (!product) return;
+    const nowLiked = await toggleLike(product.id);
+    setLikeNotice(nowLiked ? "Added to your Sacred Wishlist! ❤️" : "Removed from Wishlist");
+    setTimeout(() => setLikeNotice(null), 2500);
+  };
+
+  const canonicalUrl = typeof window !== 'undefined' 
+    ? `${window.location.origin}/product/${product?.slug || product?.id}` 
+    : `https://bbincense.in/product/${product?.slug || product?.id}`;
+
+  const handleShare = async () => {
+    if (!product) return;
+    const shareData = {
+      title: `${product.name} - Bhakt & Bhakti Incense`,
+      text: `Experience the divine aroma of ${product.name} by Bhakt & Bhakti Incense. 100% Charcoal-Free handcrafted masala agarbatti:`,
+      url: canonicalUrl
+    };
+
+    if (typeof navigator !== 'undefined' && navigator.share && navigator.canShare && navigator.canShare(shareData)) {
+      try {
+        await navigator.share(shareData);
+        return;
+      } catch (err: any) {
+        if (err.name === 'AbortError') return;
+      }
+    }
+    // Fallback share modal for desktop or unsupported browsers
+    setShareModalOpen(true);
+  };
+
   return (
     <div className="pt-24 bg-chai-50 min-h-screen">
       {/* Breadcrumb Navigation */}
@@ -166,6 +213,7 @@ export default function ProductDetail() {
                 transition={{ duration: 0.3 }}
                 src={selectedImage || product.image} 
                 alt={`Bhakt & Bhakti ${product.name}`}
+                loading="lazy"
                 className="max-h-[420px] w-auto object-contain mx-auto transition-transform hover:scale-105 duration-500"
               />
 
@@ -182,11 +230,44 @@ export default function ProductDetail() {
                 </span>
               </div>
 
-              {discountPercent > 0 && purchasable && (
-                <div className="absolute top-6 right-6 bg-marigold-500 text-espresso-900 text-xs px-3 py-1 font-bold rounded-full uppercase tracking-wider shadow-sm">
-                  {discountPercent}% OFF
-                </div>
-              )}
+              {/* Floating Top Right Action Overlay: Like / Wishlist & Share */}
+              <div className="absolute top-6 right-6 flex items-center gap-2 z-10">
+                {discountPercent > 0 && purchasable && (
+                  <div className="bg-marigold-500 text-espresso-900 text-xs px-3 py-1 font-bold rounded-full uppercase tracking-wider shadow-sm">
+                    {discountPercent}% OFF
+                  </div>
+                )}
+                {/* Heart Button */}
+                <button
+                  type="button"
+                  onClick={handleToggleLike}
+                  aria-label={liked ? "Remove from wishlist" : "Add to wishlist"}
+                  className={`p-2.5 rounded-full backdrop-blur-md shadow-md border transition-all flex items-center justify-center cursor-pointer ${
+                    liked 
+                      ? 'bg-kumkum-50 text-kumkum-600 border-kumkum-300 ring-2 ring-kumkum-200' 
+                      : 'bg-white/95 text-espresso-600 hover:text-kumkum-600 border-chai-200 hover:bg-white'
+                  }`}
+                  title={liked ? "Remove from wishlist" : "Add to wishlist"}
+                >
+                  <Heart 
+                    size={20} 
+                    className={`transition-all duration-300 ${
+                      liked ? 'fill-kumkum-600 text-kumkum-600 scale-110' : 'hover:scale-110'
+                    }`} 
+                  />
+                </button>
+
+                {/* Share Button */}
+                <button
+                  type="button"
+                  onClick={handleShare}
+                  aria-label="Share product"
+                  className="p-2.5 rounded-full bg-white/95 hover:bg-white text-espresso-600 hover:text-marigold-600 border border-chai-200 shadow-md backdrop-blur-md transition-all hover:scale-105 cursor-pointer"
+                  title="Share product"
+                >
+                  <Share2 size={20} />
+                </button>
+              </div>
             </div>
 
             {/* Thumbnail Strip */}
@@ -203,7 +284,7 @@ export default function ProductDetail() {
                         : 'border-chai-200 hover:border-marigold-400 opacity-80 hover:opacity-100'
                     }`}
                   >
-                    <img src={imgUrl} alt={`Thumbnail ${idx + 1}`} className="w-full h-full object-contain" />
+                    <img src={imgUrl} alt={`Thumbnail ${idx + 1}`} loading="lazy" className="w-full h-full object-contain" />
                   </button>
                 ))}
               </div>
@@ -254,6 +335,62 @@ export default function ProductDetail() {
                 <span>Handcrafted in India</span>
               </p>
             </div>
+
+            {/* Wishlist & Share Bar (Modern Flipkart / E-commerce style) */}
+            <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-white rounded-2xl border border-chai-200 shadow-xs">
+              <div className="flex items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={handleToggleLike}
+                  aria-label={liked ? "Remove from wishlist" : "Add to wishlist"}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 border cursor-pointer ${
+                    liked
+                      ? 'bg-kumkum-50 text-kumkum-700 border-kumkum-200 shadow-xs ring-1 ring-kumkum-200'
+                      : 'bg-chai-50 text-espresso-800 hover:bg-chai-100 border-chai-200'
+                  }`}
+                >
+                  <Heart
+                    size={17}
+                    className={`transition-colors duration-200 ${
+                      liked ? 'fill-kumkum-600 text-kumkum-600 scale-105' : 'text-espresso-600'
+                    }`}
+                  />
+                  <span>{liked ? 'Saved in Wishlist' : 'Add to Wishlist'}</span>
+                </button>
+
+                {/* Total Product Likes Count Badge */}
+                <div 
+                  className="flex items-center gap-1.5 px-3 py-2 bg-chai-100/70 text-espresso-800 rounded-xl text-xs font-bold border border-chai-200"
+                  title={`${likesCount} devotees liked this fragrance`}
+                >
+                  <span className="text-kumkum-600">❤️</span>
+                  <span>{likesCount} {likesCount === 1 ? 'like' : 'likes'}</span>
+                </div>
+              </div>
+
+              {/* Share Button with Label */}
+              <button
+                type="button"
+                onClick={handleShare}
+                aria-label="Share product"
+                className="px-3.5 py-2 rounded-xl text-xs font-bold bg-chai-50 hover:bg-marigold-50 text-espresso-800 hover:text-marigold-800 border border-chai-200 hover:border-marigold-300 transition-all flex items-center gap-2 shadow-2xs cursor-pointer"
+              >
+                <Share2 size={16} className="text-marigold-600" />
+                <span>Share Offering</span>
+              </button>
+            </div>
+
+            {/* Like notification toast banner */}
+            {likeNotice && (
+              <motion.div 
+                initial={{ opacity: 0, y: -5 }} 
+                animate={{ opacity: 1, y: 0 }}
+                className="p-3 bg-kumkum-50 border border-kumkum-200 rounded-xl text-xs font-bold text-kumkum-800 flex items-center gap-2 shadow-xs"
+              >
+                <Heart size={15} className="fill-kumkum-600 text-kumkum-600 flex-shrink-0" />
+                <span>{likeNotice}</span>
+              </motion.div>
+            )}
 
             {/* Price section */}
             <div className="bg-white p-5 rounded-2xl border border-chai-200 shadow-sm flex items-baseline gap-4">
@@ -493,6 +630,15 @@ export default function ProductDetail() {
           </div>
         )}
       </div>
+
+      {product && (
+        <ProductShareModal
+          isOpen={shareModalOpen}
+          onClose={() => setShareModalOpen(false)}
+          product={product}
+          shareUrl={canonicalUrl}
+        />
+      )}
     </div>
   );
 }

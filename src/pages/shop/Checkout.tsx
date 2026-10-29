@@ -119,7 +119,6 @@ export default function Checkout() {
     setPlacing(true);
 
     try {
-      // 1. Submit through server-side authoritative API
       const response = await fetch('/api/orders/create', {
         method: 'POST',
         headers: {
@@ -145,11 +144,20 @@ export default function Checkout() {
         })
       });
 
-      const result = await response.json();
+      let result;
+      let responseText = '';
+      try {
+        responseText = await response.text();
+        result = responseText ? JSON.parse(responseText) : {};
+      } catch (parseErr) {
+        console.error("Failed to parse response:", responseText);
+        throw new Error("Server returned an invalid response. Please try again.");
+      }
 
       if (!response.ok) {
         throw new Error(result.error || "Failed to place order. Please check item availability.");
       }
+
 
       // Save order snapshot locally so confirmation and invoice pages render reliably
       const orderSnapshot = {

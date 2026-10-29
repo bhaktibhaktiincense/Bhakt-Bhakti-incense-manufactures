@@ -142,6 +142,7 @@ export default function Products() {
                       <img 
                         src={prod.image} 
                         alt={`Bhakt & Bhakti ${prod.name} Incense Sticks`} 
+                        loading="lazy"
                         className={`w-full h-full object-contain transition-transform duration-700 ${
                           purchasable ? 'group-hover:scale-105' : isComingSoonProd ? 'group-hover:scale-102' : 'opacity-60 mix-blend-luminosity'
                         }`} 

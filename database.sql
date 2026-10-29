@@ -456,3 +456,46 @@ CREATE POLICY "Admin delete analytics"
 -- Grant privileges for analytics_events
 GRANT SELECT, INSERT ON TABLE analytics_events TO anon, authenticated;
 GRANT ALL ON TABLE analytics_events TO service_role;
+
+
+-- =========================================================================
+-- 10. PRODUCT LIKES & WISHLISTS TABLE
+-- =========================================================================
+CREATE TABLE IF NOT EXISTS public.product_likes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  product_id TEXT NOT NULL,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  visitor_id TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+);
+
+-- Indexes for performance
+CREATE INDEX IF NOT EXISTS idx_product_likes_product_id ON public.product_likes(product_id);
+CREATE INDEX IF NOT EXISTS idx_product_likes_user_id ON public.product_likes(user_id);
+CREATE INDEX IF NOT EXISTS idx_product_likes_visitor_id ON public.product_likes(visitor_id);
+
+-- Enable RLS
+ALTER TABLE public.product_likes ENABLE ROW LEVEL SECURITY;
+
+-- Policies (Safe drop & create)
+DROP POLICY IF EXISTS "Public can view product likes" ON public.product_likes;
+CREATE POLICY "Public can view product likes"
+  ON public.product_likes FOR SELECT
+  USING (true);
+
+DROP POLICY IF EXISTS "Public and users can insert likes" ON public.product_likes;
+CREATE POLICY "Public and users can insert likes"
+  ON public.product_likes FOR INSERT
+  WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Users can remove their own likes" ON public.product_likes;
+CREATE POLICY "Users can remove their own likes"
+  ON public.product_likes FOR DELETE
+  USING (
+    (auth.uid() IS NOT NULL AND user_id = auth.uid()) OR
+    (visitor_id IS NOT NULL)
+  );
+
+GRANT SELECT, INSERT, DELETE ON TABLE public.product_likes TO anon, authenticated;
+GRANT ALL ON TABLE public.product_likes TO service_role;
+

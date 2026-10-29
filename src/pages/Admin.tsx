@@ -116,6 +116,10 @@ export default function Admin() {
 
       let query = supabase.from(tableName).select(activeTab === 'Orders' ? '*, order_items(*)' : '*').order('created_at', { ascending: false });
       
+      if (activeTab === 'Orders') {
+        query = query.limit(50);
+      }
+      
       if (statusFilter !== 'All' && tableName !== 'Feedback' && tableName !== 'customers') {
         query = query.eq('status', statusFilter);
       }

@@ -160,7 +160,7 @@ export async function trackEvent(
     session_id: sessionId,
     traffic_source: source,
     referrer_domain: domain || undefined,
-    device_type: deviceType,
+    device_category: deviceType,
     browser: browser,
     metadata: data?.metadata || undefined,
     created_at: new Date().toISOString()

@@ -12,6 +12,10 @@ const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://jopjcvebzigntnpxlj
 const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
+console.log("Initializing server...");
+console.log("Supabase URL configured:", !!supabaseUrl);
+console.log("Supabase Key configured:", !!supabaseKey);
+
 // Fallback catalog of authentic items with authoritative pricing and inventory
 const DEFAULT_CATALOG: Record<string, { name: string; price: number; stock: number; image: string }> = {
   'rajnigandha': { name: 'Rajnigandha Premium', price: 150, stock: 150, image: '/IMG-20260808-WA0005.jpg' },
@@ -471,35 +475,18 @@ async function startServer() {
           .single();
 
         if (orderErr) {
-          console.warn("Direct order select error (RLS), trying blind insert:", orderErr.message);
-          // If select is denied by RLS, insert without returning data
-          const blindInsert = await supabase.from("orders").insert({
-            order_number: uniqueOrderNumber,
-            user_id: user_id || null,
-            customer_name: customer_name.trim(),
-            email: email?.trim() || `${cleanPhone}@customer.bbincense.in`,
-            phone: cleanPhone,
-            shipping_address: fullAddress,
-            order_notes: order_notes || null,
-            subtotal: serverSubtotal,
-            total: serverTotal,
-            status: "Pending",
-            payment_status: "Pending (COD)",
-            payment_method: "COD"
-          });
-          if (blindInsert.error) {
-            console.error("Order insertion failed:", blindInsert.error);
-          }
-          orderRecord = { id: uniqueOrderNumber, order_number: uniqueOrderNumber };
+          console.error("Order insertion failed. Error:", orderErr.message, "Details:", orderErr.details, "Hint:", orderErr.hint);
+          // Stop if order insertion fails, do not proceed to item insertion
+          return res.status(500).json({ error: "Failed to create order record." });
         } else {
           orderRecord = insertedOrder;
         }
       } catch (dbErr) {
         console.error("Database order insertion error:", dbErr);
-        orderRecord = { id: uniqueOrderNumber, order_number: uniqueOrderNumber };
+        return res.status(500).json({ error: "Database error during order creation." });
       }
 
-      const finalOrderId = orderRecord?.id || uniqueOrderNumber;
+      const finalOrderId = orderRecord.id;
 
       // 8. Insert Immutable Order Items
       try {
@@ -521,7 +508,7 @@ async function startServer() {
       }
 
       // 9. Decrement stock in database for ordered items
-      for (const vi of validatedItems) {
+      await Promise.all(validatedItems.map(async (vi) => {
         try {
           const currentP = productMap.get(vi.product_id);
           if (currentP && typeof currentP.stock_quantity === 'number') {
@@ -537,7 +524,7 @@ async function startServer() {
         } catch (stockErr) {
           console.error("Error updating stock quantity:", stockErr);
         }
-      }
+      }));
 
       // 10. Send Confirmation Email via Resend asynchronously (does not block checkout response)
       try {
@@ -798,6 +785,247 @@ async function startServer() {
     }
   });
 
+  /**
+   * Product Likes and Wishlist API
+   * Supports persistent likes for both logged-in users and anonymous visitors
+   */
+  const likesFile = path.join(process.cwd(), "data", "product_likes.json");
+  if (!fs.existsSync(path.dirname(likesFile))) {
+    fs.mkdirSync(path.dirname(likesFile), { recursive: true });
+  }
+
+  const getLocalLikes = (): Array<{ id: string; product_id: string; user_id?: string | null; visitor_id: string; created_at: string }> => {
+    try {
+      if (fs.existsSync(likesFile)) {
+        const raw = fs.readFileSync(likesFile, "utf-8");
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (e) {
+      console.warn("Failed reading product likes file:", e);
+    }
+    return [];
+  };
+
+  const saveLocalLikes = (likes: any[]) => {
+    try {
+      fs.writeFileSync(likesFile, JSON.stringify(likes, null, 2));
+    } catch (e) {
+      console.error("Failed saving product likes file:", e);
+    }
+  };
+
+  // 1. Get likes for a specific product
+  app.get("/api/products/:productId/likes", async (req, res) => {
+    try {
+      const { productId } = req.params;
+      const visitorId = String(req.query.visitor_id || "");
+      const userId = req.query.user_id ? String(req.query.user_id) : null;
+
+      let likeCount = 0;
+      let isLiked = false;
+
+      // Try Supabase first
+      if (supabase && supabaseKey) {
+        try {
+          const { count, error: countErr } = await supabase
+            .from("product_likes")
+            .select("*", { count: "exact", head: true })
+            .eq("product_id", productId);
+
+          if (!countErr && typeof count === "number") {
+            likeCount = count;
+
+            if (userId) {
+              const { data: userLike } = await supabase
+                .from("product_likes")
+                .select("id")
+                .eq("product_id", productId)
+                .eq("user_id", userId)
+                .maybeSingle();
+              if (userLike) isLiked = true;
+            } else if (visitorId) {
+              const { data: visLike } = await supabase
+                .from("product_likes")
+                .select("id")
+                .eq("product_id", productId)
+                .eq("visitor_id", visitorId)
+                .maybeSingle();
+              if (visLike) isLiked = true;
+            }
+
+            return res.json({ productId, likeCount, isLiked });
+          }
+        } catch {
+          // fallback to local
+        }
+      }
+
+      // Local fallback
+      const allLikes = getLocalLikes();
+      const productLikes = allLikes.filter(l => l.product_id === productId);
+      likeCount = productLikes.length;
+      isLiked = productLikes.some(l => (userId && l.user_id === userId) || (visitorId && l.visitor_id === visitorId));
+
+      return res.json({ productId, likeCount, isLiked });
+    } catch (err: any) {
+      console.error("Fetch likes error:", err);
+      return res.status(500).json({ error: "Failed to fetch like status" });
+    }
+  });
+
+  // 2. Toggle like on a product
+  app.post("/api/products/:productId/like", async (req, res) => {
+    try {
+      const { productId } = req.params;
+      const { visitor_id, user_id, action } = req.body;
+
+      if (!visitor_id && !user_id) {
+        return res.status(400).json({ error: "visitor_id or user_id required" });
+      }
+
+      const vid = String(visitor_id || "anon_" + Date.now());
+      const uid = user_id ? String(user_id) : null;
+
+      let allLikes = getLocalLikes();
+      const existingIndex = allLikes.findIndex(l => 
+        l.product_id === productId && ((uid && l.user_id === uid) || (vid && l.visitor_id === vid))
+      );
+
+      let currentlyLiked = existingIndex !== -1;
+      let shouldLike = action === "like" ? true : action === "unlike" ? false : !currentlyLiked;
+
+      if (shouldLike) {
+        if (!currentlyLiked) {
+          const newLike = {
+            id: "like_" + Date.now() + "_" + Math.random().toString(36).substring(2, 7),
+            product_id: productId,
+            user_id: uid,
+            visitor_id: vid,
+            created_at: new Date().toISOString()
+          };
+          allLikes.push(newLike);
+          saveLocalLikes(allLikes);
+
+          // Mirror to Supabase
+          if (supabase && supabaseKey) {
+            try {
+              await supabase.from("product_likes").insert({
+                product_id: productId,
+                user_id: uid,
+                visitor_id: vid
+              });
+            } catch {}
+          }
+        }
+      } else {
+        if (currentlyLiked) {
+          allLikes = allLikes.filter((_, idx) => idx !== existingIndex);
+          saveLocalLikes(allLikes);
+
+          // Mirror delete to Supabase
+          if (supabase && supabaseKey) {
+            try {
+              if (uid) {
+                await supabase.from("product_likes").delete().eq("product_id", productId).eq("user_id", uid);
+              } else {
+                await supabase.from("product_likes").delete().eq("product_id", productId).eq("visitor_id", vid);
+              }
+            } catch {}
+          }
+        }
+      }
+
+      const updatedCount = allLikes.filter(l => l.product_id === productId).length;
+      return res.json({ success: true, isLiked: shouldLike, likeCount: updatedCount });
+    } catch (err: any) {
+      console.error("Toggle like error:", err);
+      return res.status(500).json({ error: "Failed to update like status" });
+    }
+  });
+
+  // 3. Get user or visitor wishlist
+  app.get("/api/user/wishlist", async (req, res) => {
+    try {
+      const visitorId = String(req.query.visitor_id || "");
+      const userId = req.query.user_id ? String(req.query.user_id) : null;
+
+      if (!visitorId && !userId) {
+        return res.json({ product_ids: [] });
+      }
+
+      // Try Supabase
+      if (supabase && supabaseKey) {
+        try {
+          let query = supabase.from("product_likes").select("product_id");
+          if (userId) {
+            query = query.eq("user_id", userId);
+          } else {
+            query = query.eq("visitor_id", visitorId);
+          }
+          const { data, error } = await query;
+          if (!error && data) {
+            const ids = Array.from(new Set(data.map(d => d.product_id)));
+            return res.json({ product_ids: ids });
+          }
+        } catch {}
+      }
+
+      // Fallback local
+      const allLikes = getLocalLikes();
+      const userLikes = allLikes.filter(l => (userId && l.user_id === userId) || (visitorId && l.visitor_id === visitorId));
+      const ids = Array.from(new Set(userLikes.map(l => l.product_id)));
+      return res.json({ product_ids: ids });
+    } catch (err: any) {
+      console.error("Get wishlist error:", err);
+      return res.status(500).json({ error: "Failed to fetch wishlist" });
+    }
+  });
+
+  // 4. Sync guest wishlist to logged-in user
+  app.post("/api/user/wishlist/sync", async (req, res) => {
+    try {
+      const { user_id, product_ids, visitor_id } = req.body;
+      if (!user_id || !Array.isArray(product_ids)) {
+        return res.status(400).json({ error: "user_id and product_ids required" });
+      }
+
+      let allLikes = getLocalLikes();
+      const vid = String(visitor_id || "");
+
+      for (const pid of product_ids) {
+        const hasUser = allLikes.some(l => l.product_id === pid && l.user_id === user_id);
+        if (!hasUser) {
+          allLikes.push({
+            id: "like_" + Date.now() + "_" + Math.random().toString(36).substring(2, 7),
+            product_id: pid,
+            user_id: user_id,
+            visitor_id: vid || "synced",
+            created_at: new Date().toISOString()
+          });
+
+          if (supabase && supabaseKey) {
+            try {
+              await supabase.from("product_likes").upsert({
+                product_id: pid,
+                user_id: user_id,
+                visitor_id: vid || "synced"
+              });
+            } catch {}
+          }
+        }
+      }
+
+      saveLocalLikes(allLikes);
+      const userLikes = allLikes.filter(l => l.user_id === user_id);
+      const finalIds = Array.from(new Set(userLikes.map(l => l.product_id)));
+      return res.json({ success: true, product_ids: finalIds });
+    } catch (err: any) {
+      console.error("Sync wishlist error:", err);
+      return res.status(500).json({ error: "Failed to sync wishlist" });
+    }
+  });
+
   // Explicitly serve sitemap.xml to prevent SPA fallback interception
   app.get("/sitemap.xml", (req, res) => {
     res.setHeader("Content-Type", "application/xml");
@@ -829,6 +1057,359 @@ async function startServer() {
       res.sendFile(path.join(distPath, "index.html"));
     });
   }
+
+  app.post("/api/orders/create", async (req, res) => {
+    try {
+      const {
+        customer_name,
+        phone,
+        email,
+        shipping_address,
+        city,
+        state,
+        pincode,
+        order_notes,
+        items,
+        user_id
+      } = req.body;
+
+      // 1. Validate required customer fields
+      if (!customer_name || customer_name.trim().length < 2) {
+        return res.status(400).json({ error: "Please provide a valid customer name." });
+      }
+
+      const cleanPhone = String(phone || "").replace(/\D/g, "");
+      if (cleanPhone.length < 10) {
+        return res.status(400).json({ error: "Please enter a valid 10-digit mobile number." });
+      }
+
+      const cleanPincode = String(pincode || "").replace(/\D/g, "");
+      if (cleanPincode.length !== 6) {
+        return res.status(400).json({ error: "Please enter a valid 6-digit PIN code." });
+      }
+
+      if (!shipping_address || shipping_address.trim().length < 5) {
+        return res.status(400).json({ error: "Please enter a complete delivery address." });
+      }
+
+      if (!Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ error: "Your shopping cart is empty." });
+      }
+
+      // 2. Duplicate submission lock
+      const idempotencyKey = `${cleanPhone}-${JSON.stringify(items.map((i: any) => [i.product_id, i.quantity]))}`;
+      if (recentOrderHashes.has(idempotencyKey)) {
+        return res.status(429).json({ error: "An identical order was just placed. Please wait a moment before submitting again." });
+      }
+      recentOrderHashes.add(idempotencyKey);
+      setTimeout(() => recentOrderHashes.delete(idempotencyKey), 30000);
+
+      // 3. Fetch latest active products from Supabase & local store for authoritative server-side price & stock verification
+      const { data: dbProducts } = await supabase.from("products").select("*");
+      const productMap = new Map<string, any>();
+
+      if (dbProducts && dbProducts.length > 0) {
+        for (const p of dbProducts) {
+          productMap.set(p.id, p);
+          if (p.slug) productMap.set(p.slug, p);
+        }
+      }
+
+      // Merge local updates
+      const localProds = getLocalProducts();
+      for (const lp of localProds) {
+        if (lp._deleted) {
+          productMap.delete(lp.id);
+          if (lp.slug) productMap.delete(lp.slug);
+        } else {
+          const existing = productMap.get(lp.id) || {};
+          const merged = { ...existing, ...lp };
+          productMap.set(lp.id, merged);
+          if (merged.slug) productMap.set(merged.slug, merged);
+        }
+      }
+
+      // 4. Validate each item, check stock, and create immutable snapshot
+      const validatedItems: Array<{
+        product_id: string;
+        product_name: string;
+        price: number;
+        quantity: number;
+        image: string;
+        total: number;
+      }> = [];
+
+      let serverSubtotal = 0;
+
+      for (const item of items) {
+        const qty = parseInt(item.quantity, 10);
+        if (isNaN(qty) || qty <= 0) {
+          return res.status(400).json({ error: `Invalid quantity for item ${item.name || item.product_id}` });
+        }
+
+        const dbProduct = productMap.get(item.product_id) || productMap.get(item.slug);
+        const fallback = DEFAULT_CATALOG[item.product_id] || DEFAULT_CATALOG[item.slug || ''];
+
+        const authorName = dbProduct?.name || dbProduct?.product_name || fallback?.name || item.name || 'Sacred Incense';
+
+        // 4a. Check if product is active
+        if (dbProduct && dbProduct.active === false) {
+          return res.status(400).json({
+            error: `"${authorName}" is currently inactive or hidden, and cannot be ordered.`
+          });
+        }
+
+        // 4b. Check if product is "Coming Soon" - strictly reject purchase
+        const isComingSoonProd = (dbProduct?.availability_label && dbProduct.availability_label.trim().toLowerCase() === 'coming soon') ||
+                                (item.availability_label && String(item.availability_label).trim().toLowerCase() === 'coming soon');
+        if (isComingSoonProd) {
+          return res.status(400).json({
+            error: `"${authorName}" is Coming Soon and not available for purchase yet.`
+          });
+        }
+
+        // 4c. Check if product is marked "Out of Stock"
+        const isOutOfStockLabel = dbProduct?.availability_label && dbProduct.availability_label.trim().toLowerCase() === 'out of stock';
+        if (isOutOfStockLabel) {
+          return res.status(400).json({
+            error: `"${authorName}" is currently out of stock.`
+          });
+        }
+
+        const authorPrice = (typeof dbProduct?.price === 'number' && dbProduct.price > 0) 
+          ? dbProduct.price 
+          : (fallback?.price || item.price || 150);
+        const availableStock = typeof dbProduct?.stock_quantity === 'number' 
+          ? dbProduct.stock_quantity 
+          : (fallback?.stock ?? 100);
+        const authorImage = dbProduct?.image || fallback?.image || item.image || '/IMG-20260808-WA0005.jpg';
+
+        // 4d. Check if sufficient stock is available
+        if (availableStock <= 0) {
+          return res.status(400).json({
+            error: `"${authorName}" is currently out of stock.`
+          });
+        }
+
+        if (qty > availableStock) {
+          return res.status(400).json({
+            error: `Insufficient stock for "${authorName}". Only ${availableStock} units available.`
+          });
+        }
+
+        const itemTotal = authorPrice * qty;
+        serverSubtotal += itemTotal;
+
+        validatedItems.push({
+          product_id: String(item.product_id),
+          product_name: authorName,
+          price: authorPrice,
+          quantity: qty,
+          image: authorImage,
+          total: itemTotal
+        });
+      }
+
+      // 5. Calculate authoritative shipping charge (Free delivery for ₹500+, ₹70 otherwise)
+      const shippingCharge = serverSubtotal >= 500 ? 0 : 70;
+      const serverTotal = serverSubtotal + shippingCharge;
+
+      // 6. Generate unique order number (e.g. BB-ORD-KY72A-8942)
+      const datePart = Date.now().toString(36).toUpperCase();
+      const randPart = Math.floor(1000 + Math.random() * 9000);
+      const uniqueOrderNumber = `BB-ORD-${datePart}-${randPart}`;
+
+      const fullAddress = `${shipping_address.trim()}, ${city || ''}, ${state || ''} - ${cleanPincode}${order_notes ? `\n\nNotes: ${order_notes}` : ''}`;
+
+      // 7. Insert Order into Supabase
+      let orderRecord: any = null;
+      try {
+        const { data: insertedOrder, error: orderErr } = await supabase
+          .from("orders")
+          .insert({
+            order_number: uniqueOrderNumber,
+            user_id: user_id || null,
+            customer_name: customer_name.trim(),
+            email: email?.trim() || `${cleanPhone}@customer.bbincense.in`,
+            phone: cleanPhone,
+            shipping_address: fullAddress,
+            order_notes: order_notes || null,
+            subtotal: serverSubtotal,
+            total: serverTotal,
+            status: "Pending",
+            payment_status: "Pending (COD)",
+            payment_method: "COD"
+          })
+          .select()
+          .single();
+
+        if (orderErr) {
+          console.error("Order insertion failed. Error:", orderErr.message, "Details:", orderErr.details, "Hint:", orderErr.hint);
+          // Stop if order insertion fails, do not proceed to item insertion
+          return res.status(500).json({ error: "Failed to create order record." });
+        } else {
+          orderRecord = insertedOrder;
+        }
+      } catch (dbErr) {
+        console.error("Database order insertion error:", dbErr);
+        return res.status(500).json({ error: "Database error during order creation." });
+      }
+
+      const finalOrderId = orderRecord.id;
+
+      // 8. Insert Immutable Order Items
+      try {
+        const orderItemsRows = validatedItems.map((vi) => ({
+          order_id: finalOrderId,
+          product_id: vi.product_id,
+          product_name: vi.product_name,
+          price: vi.price,
+          quantity: vi.quantity,
+          image: vi.image
+        }));
+
+        const { error: itemsErr } = await supabase.from("order_items").insert(orderItemsRows);
+        if (itemsErr) {
+          console.warn("Order items insertion warning:", itemsErr.message);
+        }
+      } catch (itemErr) {
+        console.error("Order items error:", itemErr);
+      }
+
+      // 9. Decrement stock in database for ordered items
+      await Promise.all(validatedItems.map(async (vi) => {
+        try {
+          const currentP = productMap.get(vi.product_id);
+          if (currentP && typeof currentP.stock_quantity === 'number') {
+            const newStock = Math.max(0, currentP.stock_quantity - vi.quantity);
+            await supabase
+              .from("products")
+              .update({ 
+                stock_quantity: newStock,
+                availability_label: newStock === 0 ? 'Out of Stock' : currentP.availability_label
+              })
+              .eq("id", currentP.id);
+          }
+        } catch (stockErr) {
+          console.error("Error updating stock quantity:", stockErr);
+        }
+      }));
+
+      // 10. Send Confirmation Email via Resend asynchronously (does not block checkout response)
+      try {
+        const resendKey = process.env.RESEND_API_KEY;
+        if (resendKey && resendKey !== "your_resend_api_key_here") {
+          const resend = new Resend(resendKey);
+          const customerEmail = email?.trim() || 'bbincensemanufacters@gmail.com';
+
+          const itemsHtml = validatedItems.map(item => `
+            <tr>
+              <td style="padding: 10px; border-bottom: 1px solid #eee;">${item.product_name}</td>
+              <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;">${item.quantity}</td>
+              <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: right;">₹${item.price}</td>
+              <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: right;">₹${item.total}</td>
+            </tr>
+          `).join("");
+
+          const invoiceHtml = `
+            <div style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin-top: 20px; background-color: #fcfaf8;">
+              <h2 style="color: #d97706; margin-top: 0; margin-bottom: 5px;">Order Invoice (Cash on Delivery)</h2>
+              <p style="margin: 0 0 15px 0; font-size: 14px; color: #6b7280;">Order No: <strong>${uniqueOrderNumber}</strong></p>
+              
+              <div style="margin-bottom: 20px;">
+                <h3 style="font-size: 14px; text-transform: uppercase; color: #9ca3af; margin-bottom: 5px;">Customer & Delivery Details:</h3>
+                <p style="margin: 0; font-weight: bold;">${customer_name}</p>
+                <p style="margin: 3px 0; font-size: 14px;">Mobile: ${cleanPhone}</p>
+                <p style="margin: 5px 0 0 0; white-space: pre-wrap; font-size: 14px;">${fullAddress}</p>
+              </div>
+              
+              <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
+                <thead>
+                  <tr style="background-color: #f3f4f6; text-align: left;">
+                    <th style="padding: 10px; border-bottom: 2px solid #ddd;">Product</th>
+                    <th style="padding: 10px; border-bottom: 2px solid #ddd; text-align: center;">Qty</th>
+                    <th style="padding: 10px; border-bottom: 2px solid #ddd; text-align: right;">Price</th>
+                    <th style="padding: 10px; border-bottom: 2px solid #ddd; text-align: right;">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${itemsHtml}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td colspan="3" style="padding: 10px; text-align: right; font-weight: bold;">Subtotal:</td>
+                    <td style="padding: 10px; text-align: right;">₹${serverSubtotal}</td>
+                  </tr>
+                  <tr>
+                    <td colspan="3" style="padding: 10px; text-align: right; font-weight: bold;">Shipping:</td>
+                    <td style="padding: 10px; text-align: right;">${shippingCharge > 0 ? `₹${shippingCharge}` : 'FREE'}</td>
+                  </tr>
+                  <tr>
+                    <td colspan="3" style="padding: 10px; text-align: right; font-weight: bold; font-size: 1.1em; color: #d97706;">Total Amount (COD):</td>
+                    <td style="padding: 10px; text-align: right; font-weight: bold; font-size: 1.1em; color: #d97706;">₹${serverTotal}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          `;
+
+          // Send to Customer if valid email provided
+          if (email && email.includes("@")) {
+            await resend.emails.send({
+              from: process.env.RESEND_FROM_EMAIL || 'Bhakt & Bhakti <onboarding@resend.dev>',
+              to: [customerEmail],
+              subject: `Order Confirmation #${uniqueOrderNumber} - Bhakt & Bhakti Incense`,
+              html: `
+                <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+                  <h1 style="color: #d97706;">Order Confirmed!</h1>
+                  <p>Namaste <strong>${customer_name}</strong>,</p>
+                  <p>Thank you for choosing Bhakt & Bhakti Incense. Your order has been placed successfully via Cash on Delivery.</p>
+                  <p>Order Number: <strong>${uniqueOrderNumber}</strong></p>
+                  ${invoiceHtml}
+                  <p style="margin-top: 30px; font-size: 13px; color: #666;">May our divine fragrances fill your sacred space with peace and positive aura.</p>
+                </div>
+              `
+            }).catch(e => console.error("Customer email error:", e));
+          }
+
+          // Send notification to Admin
+          const adminEmail = process.env.ADMIN_EMAIL || 'bbincensemanufacters@gmail.com';
+          const toAddrs = [adminEmail];
+          if (adminEmail !== 'bs635379@gmail.com') toAddrs.push('bs635379@gmail.com');
+
+          await resend.emails.send({
+            from: process.env.RESEND_FROM_EMAIL || 'Bhakt & Bhakti <onboarding@resend.dev>',
+            to: toAddrs,
+            subject: `New COD Order Received #${uniqueOrderNumber} - ₹${serverTotal}`,
+            html: `
+              <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+                <h1 style="color: #d97706;">New Order Received!</h1>
+                <p>A new Cash on Delivery order was placed by <strong>${customer_name}</strong> (${cleanPhone}).</p>
+                ${invoiceHtml}
+                <p style="margin-top: 20px;">Please open the Admin Panel -> Orders to confirm and dispatch the shipment.</p>
+              </div>
+            `
+          }).catch(e => console.error("Admin email error:", e));
+        }
+      } catch (emailErr) {
+        console.error("Order email error:", emailErr);
+      }
+
+      return res.json({
+        success: true,
+        orderId: finalOrderId,
+        orderNumber: uniqueOrderNumber,
+        subtotal: serverSubtotal,
+        shippingCharge,
+        total: serverTotal,
+        items: validatedItems
+      });
+
+    } catch (err: any) {
+      console.error("Order creation fatal error:", err);
+      return res.status(500).json({ error: err.message || "Failed to process order. Please try again." });
+    }
+  });
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);

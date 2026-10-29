@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Menu, X, ShoppingCart, User } from 'lucide-react';
+import { Menu, X, ShoppingCart, User, Heart } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
+import { useWishlist } from '../contexts/WishlistContext';
 
 export default function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -12,6 +13,7 @@ export default function Navbar() {
   const location = useLocation();
   const { user } = useAuth();
   const { cartCount } = useCart();
+  const { wishlistCount } = useWishlist();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -84,10 +86,27 @@ export default function Navbar() {
           ))}
         </nav>
 
-        {/* Desktop Right (Cart, Auth, CTA) */}
-        <div className="hidden lg:flex items-center space-x-6">
+        {/* Desktop Right (Wishlist, Cart, Auth, CTA) */}
+        <div className="hidden lg:flex items-center space-x-5">
+          {/* Wishlist Link */}
+          <Link 
+            to={user ? "/account?tab=wishlist" : "/account?tab=wishlist"} 
+            aria-label="View Wishlist"
+            className={cn(
+              "relative p-2 transition-colors",
+              isScrolled ? "text-espresso-900 hover:text-kumkum-600" : "text-chai-50 hover:text-marigold-400"
+            )}
+            title="My Sacred Wishlist"
+          >
+            <Heart size={22} className={wishlistCount > 0 ? "fill-kumkum-600 text-kumkum-600" : ""} />
+            {wishlistCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-kumkum-600 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">
+                {wishlistCount}
+              </span>
+            )}
+          </Link>
           
-          <Link to="/cart" className={cn(
+          <Link to="/cart" aria-label="Shopping Cart" className={cn(
             "relative p-2 transition-colors",
             isScrolled ? "text-espresso-900 hover:text-kumkum-600" : "text-chai-50 hover:text-marigold-400"
           )}>
@@ -100,7 +119,7 @@ export default function Navbar() {
           </Link>
 
           {user ? (
-            <Link to="/account" className={cn(
+            <Link to="/account" aria-label="My Account" className={cn(
               "flex items-center gap-2 p-2 transition-colors",
               isScrolled ? "text-espresso-900 hover:text-kumkum-600" : "text-chai-50 hover:text-marigold-400"
             )}>
@@ -129,8 +148,24 @@ export default function Navbar() {
         </div>
 
         {/* Mobile Menu Toggle */}
-        <div className="lg:hidden z-50 flex items-center gap-4">
-          <Link to="/cart" className={cn(
+        <div className="lg:hidden z-50 flex items-center gap-3">
+          <Link 
+            to="/account?tab=wishlist" 
+            aria-label="Wishlist"
+            className={cn(
+              "relative p-1 transition-colors",
+              isScrolled || mobileMenuOpen ? "text-espresso-900" : "text-chai-50"
+            )}
+          >
+            <Heart size={22} className={wishlistCount > 0 ? "fill-kumkum-600 text-kumkum-600" : ""} />
+            {wishlistCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-kumkum-600 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
+                {wishlistCount}
+              </span>
+            )}
+          </Link>
+
+          <Link to="/cart" aria-label="Cart" className={cn(
             "relative p-1 transition-colors",
             isScrolled || mobileMenuOpen ? "text-espresso-900" : "text-chai-50"
           )}>
@@ -142,6 +177,7 @@ export default function Navbar() {
             )}
           </Link>
           <button
+            aria-label="Toggle Navigation Menu"
             className={cn(
               "p-1",
               isScrolled || mobileMenuOpen ? "text-espresso-900" : "text-chai-50"
@@ -194,6 +230,18 @@ export default function Navbar() {
                     <User size={20} className="mr-3 text-kumkum-600" /> Login / Sign Up
                   </Link>
                 )}
+
+                <Link to="/account?tab=wishlist" className="text-xl font-medium tracking-wide uppercase text-espresso-900 flex items-center justify-between mt-4">
+                  <div className="flex items-center">
+                    <Heart size={20} className={`mr-3 ${wishlistCount > 0 ? 'text-kumkum-600 fill-kumkum-600' : 'text-espresso-700'}`} /> 
+                    <span>My Wishlist</span>
+                  </div>
+                  {wishlistCount > 0 && (
+                    <span className="px-2.5 py-0.5 text-xs font-bold bg-kumkum-100 text-kumkum-700 rounded-full">
+                      {wishlistCount}
+                    </span>
+                  )}
+                </Link>
               </motion.div>
 
               <motion.div 
