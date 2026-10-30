@@ -119,45 +119,28 @@ export default function Checkout() {
     setPlacing(true);
 
     try {
-      const response = await fetch('/api/orders/create', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          customer_name: formData.name.trim(),
-          phone: cleanPhone,
-          email: formData.email.trim() || `${cleanPhone}@customer.bbincense.in`,
-          shipping_address: formData.address.trim(),
-          city: formData.city.trim(),
-          state: formData.state.trim(),
-          pincode: cleanPin,
-          order_notes: formData.notes.trim(),
-          items: items.map(i => ({
-            product_id: i.product_id,
-            name: i.name,
-            price: i.price,
-            quantity: i.quantity,
-            image: i.image
-          })),
-          user_id: user?.id || null
-        })
+      const { data, error: rpcError } = await supabase.rpc('create_order', {
+        p_customer_name: formData.name.trim(),
+        p_phone: cleanPhone,
+        p_email: formData.email.trim() || `${cleanPhone}@customer.bbincense.in`,
+        p_shipping_address: formData.address.trim(),
+        p_city: formData.city.trim(),
+        p_state: formData.state.trim(),
+        p_pincode: cleanPin,
+        p_order_notes: formData.notes.trim(),
+        p_items: items.map(i => ({
+          product_id: i.product_id,
+          quantity: i.quantity
+        })),
+        p_user_id: user?.id || null
       });
 
-      let result;
-      let responseText = '';
-      try {
-        responseText = await response.text();
-        result = responseText ? JSON.parse(responseText) : {};
-      } catch (parseErr) {
-        console.error("Failed to parse response:", responseText);
-        throw new Error("Server returned an invalid response. Please try again.");
+      if (rpcError) {
+        console.error("RPC Order error:", rpcError);
+        throw new Error(rpcError.message || "Failed to place order.");
       }
 
-      if (!response.ok) {
-        throw new Error(result.error || "Failed to place order. Please check item availability.");
-      }
-
+      const result = data;
 
       // Save order snapshot locally so confirmation and invoice pages render reliably
       const orderSnapshot = {
